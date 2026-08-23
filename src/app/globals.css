@@ -272,6 +272,7 @@ a {
 }
 
 .statusBadge.unconfigured,
+.statusBadge.planned,
 .statusBadge.neutral {
   color: #b2b7ad;
 }
