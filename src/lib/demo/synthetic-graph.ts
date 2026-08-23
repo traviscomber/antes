@@ -2,7 +2,7 @@ import type { OperationalGraph } from "@/lib/operational-graph/types";
 
 const ORGANIZATION_ID = "synthetic-beverage-chile";
 
-export const syntheticBeverageGraph: OperationalGraph = {
+export const syntheticBeverageGraph = {
   organizationId: ORGANIZATION_ID,
   dataMode: "synthetic_demo",
   nodes: [
@@ -116,4 +116,4 @@ export const syntheticBeverageGraph: OperationalGraph = {
       attributes: { synthetic: true },
     },
   ],
-};
+} satisfies OperationalGraph;
