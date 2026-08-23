@@ -57,6 +57,7 @@ interface BdePayload extends JsonObject {
 
 export class BancoCentralConnector implements CountrySignalConnector {
   readonly source = SOURCE;
+  readonly parserVersion = PARSER_VERSION;
   private readonly token?: string;
   private readonly series: BancoCentralConfig["series"];
   private readonly lookbackDays: number;
@@ -150,7 +151,7 @@ export class BancoCentralConnector implements CountrySignalConnector {
             statusCode: row.statusCode,
           },
           sourceUrl: this.source.canonicalUrl,
-          sourceVersion: PARSER_VERSION,
+          sourceVersion: this.parserVersion,
           qualityState: row.statusCode === "OK" ? "validated" : "unknown",
         });
       }
@@ -159,7 +160,7 @@ export class BancoCentralConnector implements CountrySignalConnector {
     return {
       sourceId: this.source.id,
       fetchedAt,
-      parserVersion: PARSER_VERSION,
+      parserVersion: this.parserVersion,
       observations,
       sourceHealth: {
         sourceId: this.source.id,
