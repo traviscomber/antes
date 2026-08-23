@@ -1,4 +1,4 @@
-import { getCountrySignalSource } from "../registry";
+import { requireCountrySignalSource } from "../registry";
 import { redactUrlSecrets, stableObservationId } from "../provenance";
 import type {
   CountrySignalConnector,
@@ -7,8 +7,7 @@ import type {
   SourceHealth,
 } from "../types";
 
-const SOURCE = getCountrySignalSource("cl.mtt.observatorio-logistico");
-if (!SOURCE) throw new Error("Observatorio Logístico registry entry is missing.");
+const SOURCE = requireCountrySignalSource("cl.mtt.observatorio-logistico");
 
 const PARSER_VERSION = "observatorio-logistico-junar@1";
 const API_BASE = "https://api.datos.observatoriologistico.cl/api/v2/datastreams";
