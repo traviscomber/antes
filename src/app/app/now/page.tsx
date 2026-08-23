@@ -7,8 +7,8 @@ export default async function NowPage() {
   const health = await getChileSignalHealth();
   const healthBySource = new Map(health.map((item) => [item.sourceId, item]));
   const healthy = health.filter((item) => item.state === "healthy").length;
-  const configured = health.filter(
-    (item) => item.state !== "unconfigured",
+  const active = health.filter((item) =>
+    ["healthy", "degraded", "unavailable"].includes(item.state),
   ).length;
 
   return (
@@ -41,7 +41,7 @@ export default async function NowPage() {
             <span>fuentes saludables</span>
           </div>
           <div>
-            <strong>{configured}</strong>
+            <strong>{active}</strong>
             <span>conectores activos</span>
           </div>
           <div>
@@ -70,7 +70,7 @@ export default async function NowPage() {
             <h3>Fuentes oficiales</h3>
           </div>
           <p>
-            Weather, logística, regulación, agua y economía preparados como señales
+            Clima, logística, regulación, agua y economía preparados como señales
             reutilizables para cualquier operación en Chile.
           </p>
         </div>
