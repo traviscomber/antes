@@ -19,6 +19,16 @@ export type SourceHealthState =
 
 export type QualityState = "raw" | "provisional" | "validated" | "unknown";
 
+export type GeoPosition = number[];
+
+export type GeoGeometry =
+  | { type: "Point"; coordinates: GeoPosition }
+  | { type: "MultiPoint"; coordinates: GeoPosition[] }
+  | { type: "LineString"; coordinates: GeoPosition[] }
+  | { type: "MultiLineString"; coordinates: GeoPosition[][] }
+  | { type: "Polygon"; coordinates: GeoPosition[][] }
+  | { type: "MultiPolygon"; coordinates: GeoPosition[][][] };
+
 export interface GeoReference {
   country: "CL";
   region?: string;
@@ -26,7 +36,7 @@ export interface GeoReference {
   commune?: string;
   latitude?: number;
   longitude?: number;
-  geometry?: GeoJSON.Geometry;
+  geometry?: GeoGeometry;
 }
 
 export interface ExternalObservation {
@@ -85,41 +95,4 @@ export interface CountrySignalConnector {
   readonly source: CountrySignalSource;
   healthCheck(): Promise<SourceHealth>;
   ingest(): Promise<IngestionBatch>;
-}
-
-declare global {
-  namespace GeoJSON {
-    type Position = number[];
-    interface Point {
-      type: "Point";
-      coordinates: Position;
-    }
-    interface MultiPoint {
-      type: "MultiPoint";
-      coordinates: Position[];
-    }
-    interface LineString {
-      type: "LineString";
-      coordinates: Position[];
-    }
-    interface MultiLineString {
-      type: "MultiLineString";
-      coordinates: Position[][];
-    }
-    interface Polygon {
-      type: "Polygon";
-      coordinates: Position[][];
-    }
-    interface MultiPolygon {
-      type: "MultiPolygon";
-      coordinates: Position[][][];
-    }
-    type Geometry =
-      | Point
-      | MultiPoint
-      | LineString
-      | MultiLineString
-      | Polygon
-      | MultiPolygon;
-  }
 }
