@@ -33,6 +33,7 @@ interface DmcPayload extends JsonObject {
 
 export class DmcWrfConnector implements CountrySignalConnector {
   readonly source = SOURCE;
+  readonly parserVersion = PARSER_VERSION;
   private readonly user?: string;
   private readonly token?: string;
   private readonly stationCode: string;
@@ -92,7 +93,7 @@ export class DmcWrfConnector implements CountrySignalConnector {
     return {
       sourceId: this.source.id,
       fetchedAt,
-      parserVersion: PARSER_VERSION,
+      parserVersion: this.parserVersion,
       observations,
       sourceHealth: {
         sourceId: this.source.id,
