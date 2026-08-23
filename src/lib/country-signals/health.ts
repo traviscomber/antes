@@ -1,14 +1,17 @@
 import { DmcWrfConnector } from "./connectors/dmc";
 import { LeyChileConnector } from "./connectors/leychile";
+import { ObservatorioLogisticoConnector } from "./connectors/observatorio-logistico";
 import { chileSignalSources } from "./registry";
 import type { SourceHealth } from "./types";
 
 export async function getChileSignalHealth(): Promise<SourceHealth[]> {
   const dmc = new DmcWrfConnector();
+  const logistics = new ObservatorioLogisticoConnector();
   const leychile = new LeyChileConnector();
 
   const activeChecks = new Map<string, Promise<SourceHealth>>([
     [dmc.source.id, dmc.healthCheck()],
+    [logistics.source.id, logistics.healthCheck()],
     [leychile.source.id, leychile.healthCheck()],
   ]);
 
