@@ -94,6 +94,7 @@ export interface IngestionBatch {
 
 export interface CountrySignalConnector {
   readonly source: CountrySignalSource;
+  readonly parserVersion: string;
   healthCheck(): Promise<SourceHealth>;
   ingest(): Promise<IngestionBatch>;
 }
