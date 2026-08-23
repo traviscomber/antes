@@ -61,3 +61,11 @@ export const chileSignalSources = [
 export function getCountrySignalSource(sourceId: string): CountrySignalSource | undefined {
   return chileSignalSources.find((source) => source.id === sourceId);
 }
+
+export function requireCountrySignalSource(sourceId: string): CountrySignalSource {
+  const source = getCountrySignalSource(sourceId);
+  if (!source) {
+    throw new Error(`Country signal source is not registered: ${sourceId}`);
+  }
+  return source;
+}
