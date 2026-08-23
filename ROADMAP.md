@@ -20,7 +20,7 @@ Objetivo: fijar producto, dominio y límites antes de escribir funcionalidad que
 - [x] Definir modelo canónico de eventos
 - [x] Definir primeras familias de eventos
 - [x] Definir superficies MVP
-- [ ] Definir ADR de stack inicial
+- [x] Definir ADR de stack inicial
 - [ ] Definir esquema PostgreSQL v0
 - [ ] Definir contratos TypeScript
 - [ ] Definir política de datos sintéticos
