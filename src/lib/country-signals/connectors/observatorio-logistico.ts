@@ -23,6 +23,7 @@ interface ObservatorioConfig {
 
 export class ObservatorioLogisticoConnector implements CountrySignalConnector {
   readonly source = SOURCE;
+  readonly parserVersion = PARSER_VERSION;
   private readonly apiKey?: string;
   private readonly datastreamId: string;
   private readonly limit: number;
@@ -108,7 +109,7 @@ export class ObservatorioLogisticoConnector implements CountrySignalConnector {
         rawEvidenceRef: evidenceRef,
         normalizedPayload: row,
         sourceUrl: this.source.canonicalUrl,
-        sourceVersion: PARSER_VERSION,
+        sourceVersion: this.parserVersion,
         qualityState: "raw",
       };
     });
@@ -116,7 +117,7 @@ export class ObservatorioLogisticoConnector implements CountrySignalConnector {
     return {
       sourceId: this.source.id,
       fetchedAt,
-      parserVersion: PARSER_VERSION,
+      parserVersion: this.parserVersion,
       observations,
       sourceHealth: {
         sourceId: this.source.id,
