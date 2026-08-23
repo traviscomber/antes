@@ -25,9 +25,10 @@ export async function getChileSignalHealth(): Promise<SourceHealth[]> {
 
       return {
         sourceId: source.id,
-        state: "unconfigured" as const,
+        state: "planned" as const,
         checkedAt: new Date().toISOString(),
-        message: "Connector is defined in the Chile Signal Pack roadmap but not enabled yet.",
+        message:
+          "Source validated for product value, but no stable production connector has been enabled yet.",
       };
     }),
   );
