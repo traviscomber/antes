@@ -42,6 +42,7 @@ export interface OperationalEdge {
 
 export interface OperationalGraph {
   organizationId: string;
+  dataMode: "tenant" | "synthetic_demo";
   nodes: OperationalNode[];
   edges: OperationalEdge[];
 }
