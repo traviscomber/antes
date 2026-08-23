@@ -1,4 +1,4 @@
-import { getCountrySignalSource } from "../registry";
+import { requireCountrySignalSource } from "../registry";
 import { stableObservationId } from "../provenance";
 import type {
   CountrySignalConnector,
@@ -7,8 +7,7 @@ import type {
   SourceHealth,
 } from "../types";
 
-const SOURCE = getCountrySignalSource("cl.bcn.leychile");
-if (!SOURCE) throw new Error("LeyChile source registry entry is missing.");
+const SOURCE = requireCountrySignalSource("cl.bcn.leychile");
 
 const PARSER_VERSION = "leychile-latest-laws@1";
 const SERVICE_URL = "https://www.bcn.cl/leychile/servicio/3/";
