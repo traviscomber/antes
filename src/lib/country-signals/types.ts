@@ -15,7 +15,8 @@ export type SourceHealthState =
   | "healthy"
   | "degraded"
   | "unconfigured"
-  | "unavailable";
+  | "unavailable"
+  | "planned";
 
 export type QualityState = "raw" | "provisional" | "validated" | "unknown";
 
