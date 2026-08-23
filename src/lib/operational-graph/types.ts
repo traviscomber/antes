@@ -47,6 +47,10 @@ export interface OperationalGraph {
   edges: OperationalEdge[];
 }
 
+export interface SyntheticOperationalGraph extends OperationalGraph {
+  dataMode: "synthetic_demo";
+}
+
 export type ObservationMatchType = "geographic" | "dependency" | "manual";
 
 export interface ObservationMatch {
