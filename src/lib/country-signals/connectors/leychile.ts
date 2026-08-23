@@ -14,6 +14,7 @@ const SERVICE_URL = "https://www.bcn.cl/leychile/servicio/3/";
 
 export class LeyChileConnector implements CountrySignalConnector {
   readonly source = SOURCE;
+  readonly parserVersion = PARSER_VERSION;
 
   async healthCheck(): Promise<SourceHealth> {
     const checkedAt = new Date().toISOString();
@@ -69,14 +70,14 @@ export class LeyChileConnector implements CountrySignalConnector {
       rawEvidenceRef: SERVICE_URL,
       normalizedPayload: { idNorma },
       sourceUrl: this.source.canonicalUrl,
-      sourceVersion: PARSER_VERSION,
+      sourceVersion: this.parserVersion,
       qualityState: "validated",
     }));
 
     return {
       sourceId: this.source.id,
       fetchedAt,
-      parserVersion: PARSER_VERSION,
+      parserVersion: this.parserVersion,
       observations,
       sourceHealth: {
         sourceId: this.source.id,
