@@ -1,8 +1,8 @@
-import type { OperationalGraph } from "@/lib/operational-graph/types";
+import type { SyntheticOperationalGraph } from "@/lib/operational-graph/types";
 
 const ORGANIZATION_ID = "synthetic-beverage-chile";
 
-export const syntheticBeverageGraph = {
+export const syntheticBeverageGraph: SyntheticOperationalGraph = {
   organizationId: ORGANIZATION_ID,
   dataMode: "synthetic_demo",
   nodes: [
@@ -116,4 +116,4 @@ export const syntheticBeverageGraph = {
       attributes: { synthetic: true },
     },
   ],
-} satisfies OperationalGraph;
+};
