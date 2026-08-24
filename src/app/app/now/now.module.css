@@ -1,0 +1,31 @@
+.grid {
+  gap: 22px;
+  border: 0;
+}
+
+.grid > article {
+  min-height: 280px;
+  padding: 28px;
+  border: 1px solid var(--line);
+}
+
+@media (max-width: 900px) {
+  .grid {
+    border: 0;
+  }
+
+  .grid > article {
+    border: 1px solid var(--line);
+  }
+}
+
+@media (max-width: 560px) {
+  .grid {
+    gap: 14px;
+  }
+
+  .grid > article {
+    min-height: 0;
+    padding: 22px;
+  }
+}
