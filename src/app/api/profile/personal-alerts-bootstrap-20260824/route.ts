@@ -44,6 +44,12 @@ export async function GET() {
   )`);
   await sql.query(`create index if not exists personal_alerts_user_active_idx on personal_alerts (user_id, level, last_seen_at desc) where state = 'active'`);
   await sql.query(`create index if not exists personal_alerts_source_active_idx on personal_alerts (source_id, user_id, last_seen_at desc) where state = 'active'`);
+  await sql.query(`alter table personal_alerts add column if not exists alert_key text`);
+  await sql.query(`update personal_alerts set alert_key = id where alert_key is null`);
+  await sql.query(`alter table personal_alerts alter column alert_key set not null`);
+  await sql.query(`alter table personal_alerts drop constraint if exists personal_alerts_user_id_observation_id_rule_version_key`);
+  await sql.query(`create unique index if not exists personal_alerts_user_key_rule_unique on personal_alerts (user_id, alert_key, rule_version)`);
+  await sql.query(`create index if not exists personal_alerts_user_key_idx on personal_alerts (user_id, alert_key, state, updated_at desc)`);
 
   const users = await sql.query(
     `select id::text as id from app_users where email = 'juan@n3uralia.com' limit 1`,
@@ -93,28 +99,6 @@ export async function GET() {
      order by alerts desc, mop_service, affected_infrastructure`,
     [userId],
   );
-  const samples = await sql.query(
-    `select
-       pa.source_id,
-       pa.signal_type,
-       pa.level,
-       round(pa.distance_km::numeric, 1) as distance_km,
-       pa.reason,
-       eo.normalized_payload ->> 'mopService' as mop_service,
-       eo.normalized_payload ->> 'affectedInfrastructure' as affected_infrastructure,
-       eo.normalized_payload ->> 'roadRole' as road_role,
-       eo.normalized_payload ->> 'emergency' as emergency,
-       pa.impact
-     from personal_alerts pa
-     join external_observations eo on eo.id = pa.observation_id
-     where pa.user_id = $1 and pa.state = 'active'
-     order by
-       case pa.level when 'critical' then 0 when 'warning' then 1 else 2 end,
-       pa.distance_km nulls last,
-       pa.source_id
-     limit 30`,
-    [userId],
-  );
 
   return NextResponse.json({
     ok: true,
@@ -122,6 +106,5 @@ export async function GET() {
     counts: counts[0] ?? null,
     breakdown,
     mopServices,
-    samples,
   });
 }
