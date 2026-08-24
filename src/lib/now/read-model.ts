@@ -20,9 +20,11 @@ export interface NowSignal {
   signalType: string;
   observedAt: string;
   qualityState: string;
+  severity?: string;
   region?: string;
   commune?: string;
   value?: string;
+  sourceObservations: number;
 }
 
 export interface NowSnapshot {
@@ -38,6 +40,7 @@ export interface NowSnapshot {
   successfulIngestions: number;
   failedIngestions: number;
   sourcesWithEvidence: number;
+  freshSources24h: number;
   latestSignalAt?: string;
   latestIngestionAt?: string;
   events: NowEvent[];
@@ -56,6 +59,7 @@ type MetricsRow = {
   successful_ingestions: number | string;
   failed_ingestions: number | string;
   sources_with_evidence: number | string;
+  fresh_sources_24h: number | string;
   latest_signal_at: string | Date | null;
   latest_ingestion_at: string | Date | null;
 };
@@ -80,12 +84,15 @@ type SignalRow = {
   signal_type: string;
   observed_at: string | Date;
   quality_state: string;
+  severity: string | null;
   region: string | null;
   commune: string | null;
   value_numeric: number | null;
   value_text: string | null;
   value_boolean: boolean | null;
   unit: string | null;
+  source_observations: number | string;
+  source_latest_at: string | Date;
 };
 
 export async function getNowSnapshot(organizationId: string): Promise<NowSnapshot> {
@@ -107,6 +114,12 @@ export async function getNowSnapshot(organizationId: string): Promise<NowSnapsho
         (select count(*)::int from source_ingestion_runs where state = 'succeeded') as successful_ingestions,
         (select count(*)::int from source_ingestion_runs where state = 'failed') as failed_ingestions,
         (select count(distinct source_id)::int from external_observations) as sources_with_evidence,
+        (select count(*)::int from (
+          select source_id
+          from external_observations
+          group by source_id
+          having max(observed_at) >= now() - interval '24 hours'
+        ) fresh_sources) as fresh_sources_24h,
         (select max(observed_at) from external_observations) as latest_signal_at,
         (select max(coalesce(finished_at, started_at)) from source_ingestion_runs) as latest_ingestion_at`,
       [organizationId],
@@ -134,23 +147,62 @@ export async function getNowSnapshot(organizationId: string): Promise<NowSnapsho
       [organizationId],
     ),
     sql.query(
-      `select
-        o.id,
-        o.source_id,
-        coalesce(s.name, o.source_id) as source_name,
-        o.signal_type,
-        o.observed_at,
-        o.quality_state,
-        o.region,
-        o.commune,
-        o.value_numeric,
-        o.value_text,
-        o.value_boolean,
-        o.unit
-      from external_observations o
-      left join signal_sources s on s.id = o.source_id
-      order by o.observed_at desc
-      limit 8`,
+      `with ranked as (
+        select
+          o.id,
+          o.source_id,
+          coalesce(s.name, o.source_id) as source_name,
+          o.signal_type,
+          o.observed_at,
+          o.ingested_at,
+          o.quality_state,
+          o.severity,
+          o.region,
+          o.commune,
+          o.value_numeric,
+          o.value_text,
+          o.value_boolean,
+          o.unit,
+          count(*) over (partition by o.source_id)::int as source_observations,
+          max(o.observed_at) over (partition by o.source_id) as source_latest_at,
+          row_number() over (
+            partition by o.source_id
+            order by
+              o.observed_at desc,
+              case o.severity
+                when 'critical' then 4
+                when 'high' then 3
+                when 'warning' then 2
+                when 'info' then 1
+                else 0
+              end desc,
+              o.value_numeric desc nulls last,
+              o.ingested_at desc,
+              o.id
+          ) as rn
+        from external_observations o
+        left join signal_sources s on s.id = o.source_id
+      )
+      select
+        id,
+        source_id,
+        source_name,
+        signal_type,
+        observed_at,
+        quality_state,
+        severity,
+        region,
+        commune,
+        value_numeric,
+        value_text,
+        value_boolean,
+        unit,
+        source_observations,
+        source_latest_at
+      from ranked
+      where rn = 1
+      order by source_latest_at desc, source_id
+      limit 16`,
     ),
   ]);
 
@@ -175,9 +227,11 @@ export async function getNowSnapshot(organizationId: string): Promise<NowSnapsho
     signalType: row.signal_type,
     observedAt: toIso(row.observed_at),
     qualityState: row.quality_state,
+    severity: row.severity ?? undefined,
     region: row.region ?? undefined,
     commune: row.commune ?? undefined,
     value: formatSignalValue(row),
+    sourceObservations: Number(row.source_observations ?? 0),
   }));
 
   return {
@@ -193,6 +247,7 @@ export async function getNowSnapshot(organizationId: string): Promise<NowSnapsho
     successfulIngestions: Number(metrics?.successful_ingestions ?? 0),
     failedIngestions: Number(metrics?.failed_ingestions ?? 0),
     sourcesWithEvidence: Number(metrics?.sources_with_evidence ?? 0),
+    freshSources24h: Number(metrics?.fresh_sources_24h ?? 0),
     latestSignalAt: toOptionalIso(metrics?.latest_signal_at),
     latestIngestionAt: toOptionalIso(metrics?.latest_ingestion_at),
     events,
@@ -209,11 +264,11 @@ function toOptionalIso(value: string | Date | null | undefined): string | undefi
   return toIso(value);
 }
 
-function formatSignalValue(row: SignalRow): string | undefined {
+function formatSignalValue(row: Pick<SignalRow, "value_numeric" | "value_text" | "value_boolean" | "unit">): string | undefined {
   if (row.value_numeric !== null) {
     return `${row.value_numeric}${row.unit ? ` ${row.unit}` : ""}`;
   }
   if (row.value_text !== null) return row.value_text;
-  if (row.value_boolean !== null) return row.value_boolean ? "true" : "false";
+  if (row.value_boolean !== null) return row.value_boolean ? "Sí" : "No";
   return undefined;
 }
