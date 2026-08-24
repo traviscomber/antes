@@ -1,12 +1,12 @@
-# ADR-001 — Stack lógico del MVP
+# ADR-001 — Stack lógico inicial
 
 **Estado:** Accepted
 
 ## Contexto
 
-ANTEMANO parte desde un repositorio nuevo y necesita demostrar anticipación operacional antes de optimizar infraestructura. El primer piloto enterprise todavía no impone un proveedor cloud, sistema de identidad, volumen de señales o restricción regulatoria específica.
+ANTEMANO necesita construir anticipación operacional con la menor complejidad que preserve corrección, seguridad, trazabilidad y capacidad de evolución.
 
-Por eso el stack inicial debe ser estable, portable y suficientemente simple para cambiar de proveedor sin reescribir el dominio.
+La primera implementación enterprise puede imponer requisitos distintos de identidad, volumen, residencia de datos, red privada o cloud. Por eso el stack debe ser portable y el dominio no debe depender del proveedor.
 
 ---
 
@@ -16,43 +16,30 @@ Por eso el stack inicial debe ser estable, portable y suficientemente simple par
 
 - React con Next.js App Router.
 - TypeScript estricto.
-- Server-side por defecto para acceso a datos sensibles.
+- Server-side por defecto para datos sensibles.
 - Componentes cliente sólo donde la interacción lo exige.
 
 ### Backend y orquestación
 
 - TypeScript server-side.
-- Contratos de dominio separados de detalles de persistencia.
+- Contratos de dominio separados de persistencia.
 - API explícita para eventos, evidencia, decisiones y outcomes.
 
 ### Base canónica
 
 - PostgreSQL.
 
-Postgres será dueño de:
-
-- organizaciones;
-- nodos operacionales;
-- relaciones;
-- observaciones normalizadas;
-- eventos;
-- evidencia referenciada;
-- impacto;
-- escenarios;
-- decisiones;
-- outcomes;
-- auditoría.
+Postgres será dueño de organizaciones, nodos, relaciones, observaciones normalizadas, eventos, evidencia referenciada, impacto, escenarios, decisiones, outcomes y auditoría.
 
 ### Evidencia cruda
 
-- Object storage para archivos, documentos, payloads pesados y evidencia binaria.
-- Postgres conserva referencia, checksum, metadatos y ownership.
+Object storage cuando existan archivos, documentos, payloads pesados o evidencia binaria. Postgres conserva referencias, ownership y metadatos.
 
 ### Procesamiento asíncrono
 
-- Jobs/cola durable administrada sólo para tareas que deban sobrevivir a fallas de request o requieran reintentos.
+Jobs/cola durable administrada sólo para tareas que deban sobrevivir a fallas de request o requieran reintentos.
 
-Casos iniciales:
+Casos:
 
 - ingesta;
 - ejecución de modelos;
@@ -61,13 +48,11 @@ Casos iniciales:
 - notificaciones;
 - reconciliación de outcomes.
 
-No se adopta Kafka en el MVP.
-
 ### IA / ML
 
-- Capa de adaptadores para evitar acoplar el dominio a un proveedor concreto.
-- Cada ejecución registra versión y procedencia.
-- Los outputs de modelos son derivados y nunca verdad canónica.
+- adaptadores para evitar acoplar el dominio a un proveedor;
+- versionado de ejecución;
+- outputs derivados, nunca verdad canónica.
 
 ### Observabilidad
 
@@ -78,91 +63,74 @@ No se adopta Kafka en el MVP.
 
 ---
 
-## Decisiones explícitamente diferidas
+## Decisiones diferidas
 
-Todavía no se fija:
+Se fijan sólo cuando los requisitos reales lo exijan:
 
-- proveedor Postgres administrado;
-- proveedor de object storage;
+- object storage;
 - proveedor de cola/jobs;
-- proveedor de identidad/SSO;
+- identidad/SSO;
 - proveedor principal de modelos;
-- infraestructura específica del primer cliente.
+- networking privado;
+- componentes especializados de analytics/time-series/graph.
 
-Estas decisiones se tomarán cuando exista evidencia sobre:
-
-- requisitos enterprise;
-- residencia de datos;
-- SSO;
-- volumen;
-- frecuencia de señales;
-- entorno cloud del cliente;
-- restricciones de seguridad;
-- latencia y costo.
+PostgreSQL administrado ya se está evaluando con Neon, pero el dominio mantiene portabilidad.
 
 ---
 
 ## Alternativas rechazadas por ahora
 
-### Neo4j / graph database desde el inicio
+### Graph database desde el inicio
 
-Rechazado porque el grafo inicial puede representarse mediante nodos y edges relacionales. Se reconsiderará sólo con evidencia de profundidad, volumen o latencia insuficiente.
+El grafo inicial puede representarse mediante nodos y edges relacionales. Se reconsidera con evidencia de profundidad, volumen o latencia insuficiente.
 
 ### Kafka / streaming dedicado
 
-Rechazado porque agrega complejidad operativa sin un throughput conocido que la justifique.
+Agrega complejidad operativa sin throughput conocido que lo justifique.
 
 ### Microservicios
 
-Rechazados para el primer incremento. El dominio será modular, pero el despliegue puede mantenerse unido mientras el producto valida sus límites reales.
+El dominio es modular; el despliegue puede mantenerse unido mientras no exista una necesidad operacional de separación.
 
-### Data lake como requisito
+### Data lake obligatorio
 
-Rechazado. ANTEMANO puede referenciar evidencia cruda en object storage y mantener sólo datos normalizados necesarios para el producto.
+No es requisito para el core transaccional. Evidencia pesada puede vivir fuera de Postgres.
 
 ### Vector database por defecto
 
-Rechazado. Los datos estructurados deben consultarse estructuradamente. Embeddings se agregarán sólo a casos donde retrieval semántico sea un requisito real.
+Datos estructurados se consultan estructuradamente. Embeddings sólo entran donde retrieval semántico sea un requisito real.
+
+### Modo demo
+
+Rechazado como arquitectura de producto. Los datos sintéticos sólo existen en fixtures automatizados de test y no se exponen en runtime.
 
 ---
 
-## Consecuencias
+## Consecuencias positivas
 
-### Positivas
-
-- menor complejidad inicial;
+- menor complejidad;
 - integridad transaccional fuerte;
 - dominio portable;
-- facilidad de testing;
+- testing sencillo;
 - menor lock-in;
-- ruta clara hacia un piloto enterprise.
+- ruta clara hacia implementaciones reales.
 
-### Costos
+## Costos
 
-- algunas capacidades avanzadas requerirán componentes especializados más adelante;
-- el grafo en Postgres debe diseñarse e indexarse con cuidado;
-- altos volúmenes de telemetría pueden exigir una proyección time-series o analítica futura.
+- algunas cargas pueden requerir componentes especializados más adelante;
+- el grafo en Postgres debe indexarse con cuidado;
+- telemetría masiva puede justificar una proyección especializada futura.
 
 ---
 
-## Regla para introducir nueva infraestructura
+## Regla para introducir infraestructura
 
-Un componente adicional sólo se incorpora si responde a una limitación verificable de:
+Un componente adicional sólo se incorpora si responde a una limitación verificable de corrección, seguridad, latencia, throughput, costo, resiliencia, búsqueda, analítica o almacenamiento.
 
-- corrección;
-- seguridad;
-- latencia;
-- throughput;
-- costo;
-- resiliencia;
-- búsqueda;
-- analítica;
-- almacenamiento.
-
-Cada nueva dependencia debe declarar fuente canónica, sincronización, staleness, rollback y comportamiento ante fallas.
+Cada dependencia debe declarar fuente canónica, sincronización, staleness, rollback y comportamiento ante fallas.
 
 ---
 
 ## Próxima decisión
 
-ADR-002 deberá fijar el proveedor concreto del primer entorno de desarrollo cuando comience el incremento ejecutable y existan requisitos suficientes para justificarlo.
+ADR-002 debe fijar la separación de ambientes y el contrato de persistencia productizable para Postgres administrado, incluyendo auth, tenancy, backups y observabilidad.

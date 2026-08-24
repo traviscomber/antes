@@ -1,5 +1,6 @@
 -- ANTEMANO Country Signal Core v0
 -- Development schema. Do not apply to production without an explicit release migration.
+-- Product runtime uses real organizations and real evidence only. Synthetic data belongs to test fixtures.
 
 create extension if not exists pgcrypto;
 
@@ -83,7 +84,6 @@ create table if not exists organizations (
   id text primary key,
   name text not null,
   slug text not null unique,
-  data_mode text not null default 'tenant' check (data_mode in ('tenant', 'synthetic_demo')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

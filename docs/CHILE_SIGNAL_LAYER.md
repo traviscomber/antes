@@ -4,7 +4,7 @@
 
 La **Capa País** convierte fuentes públicas oficiales de Chile en señales externas reutilizables por ANTEMANO.
 
-La idea es que un nuevo cliente no parta desde cero: antes de conectar SAP, SCADA, WMS, TMS o sensores privados, ANTEMANO ya puede observar contexto meteorológico, hídrico, logístico, energético, sísmico, regulatorio y macroeconómico del país.
+Una organización no parte desde cero: antes de integrar todos sus sistemas internos, ANTEMANO puede observar contexto meteorológico, hídrico, logístico, energético, sísmico, regulatorio y macroeconómico del país.
 
 La Capa País no reemplaza los datos del cliente. Los contextualiza.
 
@@ -19,32 +19,28 @@ ANTEMANO GRAPH
         ↓
 EVENT CANDIDATES
         ↓
-IMPACTO SOBRE LA OPERACIÓN DEL CLIENTE
+IMPACTO SOBRE UNA OPERACIÓN REAL
 ```
 
 ---
 
-## Principio de diseño
+## Regla central
 
-Una señal pública no debe convertirse automáticamente en un evento del cliente.
+Una señal pública no se convierte automáticamente en un evento operacional.
 
-Debe existir una relación verificable entre la señal y uno o más nodos del grafo operacional.
-
-Ejemplo:
+Debe existir una relación verificable entre la señal y uno o más nodos del grafo de una organización autorizada.
 
 ```text
-DMC pronostica calor extremo en Santiago
-        ↓
-La planta y 3 centros de distribución están dentro del área afectada
-        ↓
-El modelo de demanda identifica sensibilidad histórica al calor
-        ↓
-Inventario disponible + capacidad logística indican riesgo
-        ↓
-ANTEMANO genera candidato de evento
+señal externa
+    ↓
+match geográfico / dependencia / vínculo explícito
+    ↓
+propagación por relaciones autorizadas
+    ↓
+event candidate
 ```
 
-La fuente pública aporta contexto. El Event Graph determina relevancia. Los motores predictivos estiman consecuencia.
+Los datos ficticios no forman parte de este flujo.
 
 ---
 
@@ -52,387 +48,253 @@ La fuente pública aporta contexto. El Event Graph determina relevancia. Los mot
 
 ## P0 — Dirección Meteorológica de Chile (DMC)
 
-### Señales
+Señales:
 
 - temperatura;
 - precipitación;
 - humedad;
 - viento;
-- olas de calor;
 - estaciones automáticas;
-- pronóstico regional WRF-DMC hasta aproximadamente cinco días.
+- pronóstico WRF-DMC.
 
-### Integración
+Casos ANTEMANO:
 
-DMC dispone de servicios web y productos JSON/GeoJSON para consumo por aplicaciones, incluyendo catastro de estaciones y datos del modelo WRF-DMC mediante usuario y API key.
-
-### Casos ANTEMANO
-
-- peak de demanda;
-- riesgo de stockout asociado al clima;
+- demanda sensible al clima;
+- stockout;
 - riesgo de ruta;
-- capacidad de transporte refrigerado;
 - estrés térmico de activos;
 - consumo energético;
-- restricciones de trabajo exterior;
-- riesgo de incendios en combinación con otras fuentes.
+- trabajo exterior;
+- interacción con incendios y otras amenazas.
 
-### Prioridad
-
-**Integrar primero.**
-
-Es una de las mejores fuentes para demostrar que ANTEMANO puede observar una condición externa antes de que aparezca en los sistemas internos de una empresa.
-
----
-
-## P0 — Dirección General de Aguas (DGA)
-
-### Señales
-
-- caudales;
-- niveles de ríos;
-- precipitación;
-- nieve;
-- volumen de embalses y lagos;
-- aguas subterráneas;
-- temperatura y calidad de agua;
-- boletines hidrológicos.
-
-### Integración
-
-La Red Hidrométrica Nacional dispone de miles de estaciones y una parte significativa transmite datos en línea. Muchas observaciones se actualizan aproximadamente cada hora. Debe validarse para cada recurso si existe un endpoint estable o si la integración debe realizarse mediante los servicios de consulta/descarga publicados por DGA.
-
-### Casos ANTEMANO
-
-- seguridad hídrica;
-- restricciones de producción;
-- crecidas e inundaciones;
-- afectación de rutas, plantas y proveedores;
-- disponibilidad de agua en operaciones intensivas;
-- riesgo sobre cuencas críticas.
-
-### Prioridad
-
-**Integrar en el primer MVP industrial.**
-
-Para alimentos, bebidas, minería, agroindustria y utilities puede transformarse en una señal crítica.
+**Estado:** conector implementado; requiere credenciales y validación continua del contrato real.
 
 ---
 
 ## P0 — Observatorio Logístico / Ministerio de Transportes
 
-### Señales
+Señales potenciales:
 
-- carga transferida en puertos;
+- carga transferida;
 - indicadores operacionales de puertos estatales;
 - recaladas;
 - pasos fronterizos;
-- carga por pasos fronterizos;
 - red vial;
-- comercio exterior logístico;
-- aforos y capacidad operacional en determinados puertos;
-- indicadores de transporte carretero, marítimo, aéreo y ferroviario.
+- capacidad y aforos;
+- transporte carretero, marítimo, aéreo y ferroviario.
 
-### Integración
-
-El Observatorio Logístico dispone de API REST con autenticación por API key y respuestas JSON. El catálogo contiene cientos de recursos y algunos conjuntos poseen actualización diaria o de alta frecuencia operacional.
-
-### Casos ANTEMANO
+Casos ANTEMANO:
 
 - retraso de proveedor;
 - congestión portuaria;
 - riesgo de llegada de materia prima;
 - tiempos de reposición;
-- cambios de ruta;
-- presión sobre capacidad logística;
-- propagación puerto → insumo → planta → SKU.
+- presión de capacidad logística;
+- propagación puerto → insumo → planta → producto.
 
-### Prioridad
-
-**Integrar primero junto con DMC.**
-
-Es especialmente potente para una demo de supply chain porque permite combinar una señal pública con una cadena de dependencias privada.
+**Estado:** conector raw implementado. Próximo requisito: tipar campos reales, timestamps, entidad portuaria/geográfica y semántica de cada señal. `logistics.dataset.row` no es suficiente para producción.
 
 ---
 
 ## P0 — LeyChile / Biblioteca del Congreso Nacional
 
-### Señales
+Señales:
 
 - normas nuevas;
 - normas modificadas;
-- leyes recientemente publicadas;
-- versiones de normas;
+- versiones;
 - relaciones entre normas;
-- texto estructurado y metadatos jurídicos.
+- texto y metadatos jurídicos.
 
-### Integración
+Casos ANTEMANO:
 
-LeyChile dispone de una API oficial. Entre sus servicios existe una consulta de normas nuevas o modificadas en un rango temporal y endpoints JSON/XML para recuperar normas y sus versiones.
-
-### Casos ANTEMANO
-
-- riesgo regulatorio;
-- nuevas obligaciones de operación;
-- cambios ambientales;
-- cambios laborales;
+- obligaciones regulatorias;
+- medioambiente;
+- laboral;
 - transporte;
 - alimentos y etiquetado;
 - seguridad industrial;
 - permisos y compliance.
 
-### Prioridad
-
-**Integrar en el core de ANTEMANO.**
-
-Esta fuente permite construir una capacidad diferencial: detectar una modificación regulatoria, clasificar qué procesos del cliente podrían estar afectados y generar una revisión antes de que el cambio llegue por correo o asesoría manual.
+**Estado:** integración actual responde, pero el parser necesita corregirse contra el contrato vigente antes de considerarse saludable.
 
 ---
 
-# Fuentes P1
+## P0 — Dirección General de Aguas (DGA)
 
-## Banco Central de Chile — BDE API
+Señales:
 
-### Señales
+- caudales;
+- niveles de ríos;
+- precipitación;
+- nieve;
+- embalses;
+- aguas subterráneas;
+- calidad y temperatura de agua;
+- boletines hidrológicos.
+
+Casos ANTEMANO:
+
+- seguridad hídrica;
+- restricciones de producción;
+- crecidas e inundaciones;
+- afectación de rutas y proveedores;
+- disponibilidad de recursos críticos.
+
+**Estado:** alto valor de producto, pero no debe activarse hasta verificar un canal programático estable y operable.
+
+---
+
+## P1 — Banco Central de Chile / BDE
+
+Señales:
 
 - dólar observado;
-- UF / UTM;
+- UF;
 - IPC;
 - tasas;
 - comercio exterior;
-- actividad económica;
 - otros indicadores macroeconómicos.
 
-### Integración
+Casos ANTEMANO:
 
-La BDE dispone de API REST autenticada mediante token y un catálogo de series. El servicio mantiene límites de consulta por cuenta, pero permite automatización continua.
-
-### Casos ANTEMANO
-
-- presión de costos en insumos importados;
 - exposición cambiaria;
-- escenarios financieros;
-- cambios de demanda agregada;
-- costo esperado de contratos indexados.
+- presión de costos;
+- contratos indexados;
+- insumos importados;
+- contexto de demanda.
 
-### Prioridad
-
-P1. Muy útil para `cost_risk`, `supplier_risk` y escenarios, pero suele operar con menor frecuencia temporal que las señales físicas.
+**Estado:** conector implementado para USD/CLP y UF; requiere token y validación recurrente de series/estado.
 
 ---
 
-## Comisión Nacional de Energía — Energía Abierta
+## P1 — Comisión Nacional de Energía / Energía Abierta
 
-### Señales
+Señales:
 
 - costos marginales;
 - generación;
-- capacidad instalada;
+- capacidad;
 - energía embalsada;
 - combustibles;
-- importaciones/exportaciones de hidrocarburos;
-- consumo energético;
+- consumo;
 - normativa del sector.
 
-### Integración
-
-Energía Abierta declara una API para consumir directamente los datos publicados por la CNE.
-
-### Casos ANTEMANO
+Casos ANTEMANO:
 
 - presión de costos energéticos;
 - disponibilidad;
 - exposición a combustibles;
-- correlación clima → energía → producción;
-- escenarios de continuidad.
-
-### Prioridad
-
-P1 para manufactura, minería, data centers, utilities y operaciones con alto consumo energético.
+- clima → energía → operación.
 
 ---
 
-## Coordinador Eléctrico Nacional — Sistema de Información Pública
+## P1 — Coordinador Eléctrico Nacional
 
-### Señales
+Señales:
 
-- generación real;
-- operación del Sistema Eléctrico Nacional;
-- datos técnicos y económicos;
-- costos marginales;
-- disponibilidad y comportamiento del sistema.
+- demanda real y proyectada;
+- generación;
+- costo marginal;
+- embalses;
+- stock de combustible;
+- limitaciones de transmisión;
+- pronósticos de corto y mediano plazo.
 
-### Integración
+Casos ANTEMANO:
 
-El SIP dispone de una API pública documentada. Algunos endpoints históricos han sido reemplazados por nuevas versiones, por lo que el connector debe implementar versionado y health checks.
-
-### Casos ANTEMANO
-
-- riesgo eléctrico;
-- stress de sistema;
+- stress del sistema;
+- continuidad operacional;
 - disponibilidad energética;
-- correlación con eventos meteorológicos;
-- continuidad de planta.
+- eventos meteorológicos con impacto eléctrico.
+
+Debe preferirse esta fuente cuando el caso requiere operación eléctrica de mayor frecuencia que series agregadas.
 
 ---
 
-## SENAPRED
+## P1 — SENAPRED
 
-### Señales
+Señales:
 
 - alertas preventivas;
-- alertas amarillas y rojas;
+- amarillas y rojas;
 - amenazas naturales y antrópicas;
-- información coordinada con organismos técnicos.
+- escalamiento oficial.
 
-### Consideración técnica
-
-SENAPRED es una fuente oficial de alto valor, pero no se debe asumir una API pública estable sin verificar cada canal. Para el producto debe implementarse como `official_alert_source` con provenance y un connector desacoplado, de modo que el mecanismo de ingestión pueda cambiar sin alterar el dominio.
-
-### Casos ANTEMANO
-
-- cierre o afectación de instalaciones;
-- rutas expuestas;
-- continuidad operacional;
-- seguridad de personas;
-- escalamiento de eventos provenientes de DMC, DGA, SERNAGEOMIN, CONAF, SHOA u otros organismos técnicos.
+ANTEMANO puede utilizar SENAPRED como fuente de confirmación/escalamiento, sin asumir que toda señal previa debe esperar una alerta formal.
 
 ---
 
-## Centro Sismológico Nacional
+## P1 — Centro Sismológico Nacional
 
-### Señales
+Señales:
 
 - actividad sísmica;
 - estaciones;
-- waveform y disponibilidad instrumental.
+- disponibilidad instrumental.
 
-### Integración
-
-Existe acceso mediante servicios FDSN Web Services basados en SeisComP.
-
-### Casos ANTEMANO
-
-- evaluación automática de exposición de instalaciones;
-- rutas y bodegas;
-- continuidad operacional;
-- activación de protocolos de inspección tras evento.
-
-La predicción sísmica no forma parte del alcance. ANTEMANO usa el evento observado para anticipar propagación operacional posterior.
+ANTEMANO no intenta predecir terremotos. Utiliza eventos observados para anticipar propagación operacional, inspecciones y continuidad posteriores.
 
 ---
 
-## SERNAGEOMIN / RNVV
+## P1 — SERNAGEOMIN / RNVV
 
-### Señales
+Señales:
 
 - alerta técnica volcánica;
 - reportes especiales;
-- vigilancia de volcanes priorizados;
 - cartografía de amenazas.
 
-### Casos ANTEMANO
+Casos:
 
 - ceniza sobre rutas o instalaciones;
-- afectación logística;
 - continuidad de proveedores;
 - exposición de activos;
-- interacción con DMC para estimar dispersión.
-
-No debe asumirse que toda la telemetría instrumental es públicamente accesible en tiempo real.
+- interacción con viento DMC.
 
 ---
 
-# Fuentes P2 / especializadas
+# Fuentes especializadas
 
 ## INE
 
-Útil para baselines y variables lentas:
-
-- ventas de supermercados;
-- actividad de comercio;
-- inventarios;
-- producción industrial;
-- precios de productor;
-- empleo;
-- transporte;
-- actividad manufacturera.
-
-Estas series pueden enriquecer forecasting y contextualizar demanda, pero no son el primer feed para alertas de minutos u horas.
-
----
+Útil para baselines y variables lentas: actividad industrial, comercio, inventarios, empleo, precios y transporte.
 
 ## ChileCompra / Mercado Público
 
-Dispone de API para licitaciones, órdenes de compra y proveedores, además de datos abiertos OCDS.
-
-Puede utilizarse para:
-
-- señales de demanda pública;
-- análisis competitivo;
-- comportamiento de proveedores;
-- oportunidades de mercado;
-- detección de cambios en compras sectoriales.
-
-Tiene más valor como módulo de market intelligence que como señal operacional básica para todos los clientes.
-
----
+Útil para señales de demanda pública, compras sectoriales, proveedores y market intelligence.
 
 ## Datos.gob.cl
 
-No debe considerarse una fuente operacional única. Es un **metacatálogo** y una puerta de descubrimiento.
+Debe tratarse como **metacatálogo**, no como una fuente operacional única.
 
-Dispone de API CKAN y DataStore:
+Puede utilizarse para:
 
-```text
-/api/3/action/package_list
-/api/3/action/package_search
-/api/3/action/datastore_search
-/api/3/action/datastore_search_sql
-```
+1. descubrir nuevas fuentes públicas;
+2. detectar actualizaciones de datasets;
+3. incorporar recursos específicos cuando exista un contrato estable y valor operacional.
 
-ANTEMANO puede usarlo para dos cosas:
-
-1. descubrir nuevas fuentes públicas relevantes;
-2. incorporar datasets específicos que ya estén publicados en DataStore.
-
-A futuro puede existir un `Source Discovery Agent` que revise periódicamente el catálogo y recomiende nuevas señales por industria y geografía.
+El endpoint de discovery no debe sustituir un proceso de evaluación de calidad, freshness, propiedad y semántica.
 
 ---
 
-# Orden de implementación recomendado
+# Orden de activación
 
-## Chile Signal Pack v0
+## Country Signal Core
 
-1. **DMC Weather Connector**
-2. **Observatorio Logístico Connector**
-3. **LeyChile Regulatory Connector**
-4. **DGA Water Connector**
-5. **Banco Central Connector**
+1. corregir LeyChile;
+2. tipar Observatorio Logístico;
+3. configurar DMC;
+4. configurar Banco Central;
+5. persistir y monitorear ingestiones reales;
+6. incorporar DGA sólo con canal estable;
+7. agregar Coordinador Eléctrico/CNE según operación.
 
-Estos cinco ya permiten construir eventos reales de alto valor sin depender inicialmente de información privada de un cliente.
-
-## Chile Signal Pack v1
-
-6. Energía Abierta / CNE
-7. Coordinador Eléctrico
-8. SENAPRED alert ingestion
-9. CSN
-10. SERNAGEOMIN
-
-## Chile Signal Pack v2
-
-11. INE
-12. ChileCompra
-13. SINCA / calidad del aire
-14. CONAF / incendios cuando exista un canal público estable apto para integración
-15. SHOA / condiciones marítimas y marejadas cuando aplique a supply chain
+El objetivo no es acumular fuentes. Es conseguir señales que puedan relacionarse con decisiones reales.
 
 ---
 
-# Modelo canónico de una señal pública
-
-Toda observación externa debe conservar provenance.
+# Contrato canónico
 
 ```ts
 interface ExternalObservation {
@@ -463,127 +325,81 @@ interface ExternalObservation {
 Reglas:
 
 - nunca sobrescribir evidencia original;
-- mantener `observedAt`, `publishedAt` e `ingestedAt` separados;
-- conservar zona geográfica y vigencia temporal;
-- registrar si el dato es provisional;
-- versionar parsers/connectors;
-- detectar cambios en schema de la fuente;
-- no convertir automáticamente una observación en hecho canónico del cliente.
+- separar `observedAt`, `publishedAt` e `ingestedAt`;
+- conservar geografía y vigencia temporal;
+- registrar calidad provisional/validada;
+- versionar parsers;
+- detectar cambios de schema;
+- sanear credenciales de URLs/evidencia;
+- no convertir una observación externa en hecho canónico del cliente.
 
 ---
 
-# Matching contra el Event Graph
-
-La Capa País debe resolver relevancia mediante tres mecanismos principales.
+# Matching contra ANTEMANO Graph
 
 ## Geográfico
 
 ```text
-señal pública → polygon / point / comuna / región
-                     ↓
-          nodos operacionales afectados
+señal → ubicación / comuna / región
+                ↓
+        nodos operacionales
 ```
-
-Ejemplo: alerta meteorológica sobre una comuna → plantas, CD, rutas o clientes dentro del área.
 
 ## Dependencias
 
 ```text
-puerto afectado
-    ↓
-embarque
-    ↓
-proveedor
-    ↓
-material
-    ↓
-planta
-    ↓
-SKU
+puerto → embarque/material → planta → producto → distribución
 ```
 
 ## Semántico
 
 ```text
-norma nueva
-    ↓
-clasificación de materia regulada
-    ↓
-procesos / activos / permisos / productos relacionados
+norma → materia regulada → procesos / permisos / productos relacionados
 ```
 
-El matching semántico puede usar modelos generativos como ayuda de clasificación, pero el vínculo operativo debe quedar trazable y revisable.
+Los modelos generativos pueden ayudar a clasificar información no estructurada, pero cada vínculo operacional importante debe quedar trazable y revisable.
 
 ---
 
-# Primera demo real recomendada
+# Persistencia y tenancy
 
-La demo debe usar datos públicos reales y datos corporativos sintéticos claramente marcados.
+Las observaciones externas son evidencia compartible sólo cuando representan hechos públicos idénticos para todas las organizaciones.
 
-## Escenario
-
-Una empresa ficticia de bebidas tiene:
-
-- planta en Región Metropolitana;
-- CD en Santiago;
-- proveedor de envases importados;
-- material crítico que llega por San Antonio;
-- 10 SKU;
-- rutas urbanas.
-
-ANTEMANO observa:
-
-1. pronóstico DMC;
-2. señales de capacidad/operación logística portuaria;
-3. condiciones hídricas DGA;
-4. normas nuevas de LeyChile;
-5. tipo de cambio Banco Central.
-
-El Command Center puede entonces generar candidatos demostrativos como:
-
-- `demand_peak_risk` por ola de calor;
-- `supplier_delay` por señal portuaria;
-- `water_constraint_risk` por deterioro de indicadores hídricos;
-- `regulatory_change` por norma nueva;
-- `import_cost_pressure` por movimiento cambiario.
-
-Los datos del Gobierno permanecen reales y citables. La operación corporativa permanece sintética y explícitamente marcada como demo.
-
----
-
-# Producto
-
-La Capa País puede convertirse en una ventaja comercial reusable:
-
-## ANTEMANO / Capa País
-
-**Inteligencia externa oficial conectada desde el primer día.**
-
-Un piloto ANTEMANO 90 no parte sólo de los datos internos que el cliente logre entregar. Parte también de un conjunto de señales oficiales ya normalizadas, versionadas y listas para correlacionarse con su operación.
-
-El activo N3uralia no es poseer los datos públicos. Es la capacidad de:
+La relevancia hacia cada cliente se almacena separadamente:
 
 ```text
-SEÑAL PÚBLICA
-    ↓
-ENTENDER DÓNDE IMPORTA
-    ↓
-RECORRER DEPENDENCIAS
-    ↓
-ESTIMAR IMPACTO
-    ↓
-CREAR TIEMPO PARA ACTUAR
+external_observation
+      ↓
+observation_match (organization_id)
+      ↓
+event_candidate (organization_id)
 ```
+
+Esto evita duplicar señales país y, al mismo tiempo, impide que una inferencia específica de una organización se convierta en estado global.
+
+Las FK/constraints deben garantizar que nodos, edges, matches y eventos pertenezcan a la organización declarada.
 
 ---
 
-## Restricciones
+# Freshness y salud
 
-- verificar términos de uso de cada fuente antes de producción;
-- no asumir SLA donde el organismo no lo ofrece;
-- implementar retries, freshness y health monitoring por connector;
-- conservar attribution y provenance;
-- distinguir datos oficiales validados de datos provisionales;
-- no presentar una fuente pública como garantía de ocurrencia futura;
-- mantener fallbacks cuando una fuente no dispone de API estable;
-- no almacenar datos personales innecesarios provenientes de fuentes públicas.
+Cada fuente declara:
+
+- estado de conector;
+- última ejecución;
+- última observación;
+- freshness esperada;
+- latencia;
+- parser/version;
+- error actual;
+- número de observaciones aceptadas/duplicadas.
+
+Una API respondiendo `200` no significa que la fuente sea saludable si el schema cambió o los datos dejaron de ser frescos.
+
+---
+
+# Regla de producto
+
+La Capa País sólo demuestra valor cuando una señal oficial puede recorrer una dependencia real y aumentar el tiempo disponible para decidir.
+
+No se utilizan organizaciones ficticias, escenarios simulados ni datos sintéticos para completar el Command Center. Los fixtures de prueba permanecen aislados en la suite automatizada.

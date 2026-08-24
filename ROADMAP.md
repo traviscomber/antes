@@ -2,306 +2,226 @@
 
 ## Norte
 
-Construir la versión mínima de ANTEMANO capaz de demostrar con evidencia que una operación puede **detectar antes, decidir antes y reducir el impacto de eventos relevantes**.
+Construir ANTEMANO como un producto operacional real: conectar señales verificables, entender dependencias, detectar eventos antes del impacto y ayudar a decidir dentro de una ventana útil.
 
-El roadmap prioriza validación sobre amplitud.
+No existe una fase de demo ni un piloto comercial de 90 días. El producto se activa progresivamente sobre datos y operaciones reales, con shadow mode como control de seguridad.
 
 ---
 
 # Fase 0 — Fundamento
 
-**Estado:** en curso
+**Estado:** completado en lo esencial.
 
-Objetivo: fijar producto, dominio y límites antes de escribir funcionalidad que luego debamos rehacer.
+- [x] posicionamiento de ANTEMANO;
+- [x] arquitectura conceptual;
+- [x] modelo canónico de eventos;
+- [x] primeras familias de eventos;
+- [x] contratos TypeScript iniciales;
+- [x] esquema Postgres inicial;
+- [x] Capa País Chile;
+- [x] Event Graph inicial;
+- [x] Event Candidate sin probabilidad ni impacto inventados;
+- [x] shell inicial `Ahora` y `Fuentes`;
+- [x] deployment Vercel;
+- [x] dominio `antemano.app`.
 
-- [x] Definir posicionamiento de ANTEMANO
-- [x] Definir ANTEMANO 90
-- [x] Definir arquitectura conceptual
-- [x] Definir modelo canónico de eventos
-- [x] Definir primeras familias de eventos
-- [x] Definir superficies MVP
-- [x] Definir ADR de stack inicial
-- [ ] Definir esquema PostgreSQL v0
-- [ ] Definir contratos TypeScript
-- [ ] Definir política de datos sintéticos
-- [ ] Definir modelo de permisos
-- [ ] Definir estrategia de evaluación
-
-**Gate:** el dominio puede representarse sin ambigüedad y no existen dos fuentes de verdad para el mismo concepto.
+**Gate:** el dominio separa hechos, inferencias, decisiones y outcomes.
 
 ---
 
-# Fase 1 — Skeleton de aplicación
+# Fase 1 — Hardening
 
-Objetivo: tener un producto navegable con arquitectura limpia y sin falsa funcionalidad.
+**Estado:** siguiente incremento obligatorio.
 
-- [ ] Inicializar aplicación web
-- [ ] Configurar TypeScript estricto
-- [ ] Configurar lint/format/typecheck
-- [ ] Crear sistema de diseño base N3uralia / ANTEMANO
-- [ ] Implementar shell y navegación
-- [ ] Implementar autenticación
-- [ ] Implementar tenancy por organización
-- [ ] Crear estados loading / empty / error / forbidden
-- [ ] Añadir observabilidad de errores
+Objetivo: preparar el producto para recibir datos operacionales reales sin exponer secretos, mezclar tenants ni depender de instalaciones no determinísticas.
 
-Rutas iniciales:
+- [ ] repositorio y módulos propietarios con exposición adecuada;
+- [ ] eliminar residuos de marca y superficies demo;
+- [ ] lockfile y `npm ci`;
+- [ ] alinear versión Node entre CI y Vercel;
+- [ ] auth para `/app`;
+- [ ] proteger APIs internas;
+- [ ] rate limiting en endpoints que consultan terceros;
+- [ ] roles y memberships;
+- [ ] constraints tenant-aware en Postgres;
+- [ ] pruebas negativas de aislamiento;
+- [ ] error tracking y logs estructurados;
+- [ ] runbook de recuperación.
+
+**Gate:** ninguna ruta protegida puede leer o escribir fuera de su organización y ninguna credencial llega al navegador, Git o logs.
+
+---
+
+# Fase 2 — Persistencia productizable
+
+Objetivo: convertir la rama de persistencia en una base reproducible y separada por ambiente.
+
+- [ ] migración canónica versionada;
+- [ ] desarrollo / preview / producción separados;
+- [ ] `DATABASE_URL` server-side por ambiente;
+- [ ] health de base;
+- [ ] source ingestion runs;
+- [ ] idempotencia;
+- [ ] retries acotados;
+- [ ] reconciliación de jobs fallidos;
+- [ ] backups y recuperación;
+- [ ] métricas de crecimiento y egress.
+
+**Gate:** el schema puede reconstruirse desde cero y una misma observación repetida no duplica evidencia.
+
+---
+
+# Fase 3 — Capa País real
+
+Objetivo: hacer que ANTEMANO observe Chile usando fuentes oficiales verificables.
+
+Orden inicial:
+
+1. LeyChile — corregir contrato actual;
+2. Observatorio Logístico — tipar señales operacionales reales;
+3. DMC — activar credenciales y forecasts;
+4. Banco Central — activar series oficiales;
+5. DGA — habilitar sólo cuando exista canal programático estable;
+6. Coordinador Eléctrico / CNE según caso de uso.
+
+Para cada fuente:
+
+- [ ] contrato documentado;
+- [ ] schema validation;
+- [ ] provenance;
+- [ ] timestamps fuente/publicación/ingesta;
+- [ ] freshness;
+- [ ] health;
+- [ ] deduplicación;
+- [ ] observaciones persistidas;
+- [ ] tests de cambio de schema;
+- [ ] alertamiento de degradación.
+
+**Gate:** al menos una fuente oficial produce observaciones persistidas y trazables de forma recurrente.
+
+---
+
+# Fase 4 — Grafo operacional real
+
+Objetivo: conectar una organización autorizada y representar sus dependencias relevantes.
+
+- [ ] organizations;
+- [ ] operational nodes;
+- [ ] operational edges;
+- [ ] source bindings;
+- [ ] geografía;
+- [ ] temporalidad de relaciones;
+- [ ] provenance de cada relación;
+- [ ] importadores/adaptadores para sistemas existentes;
+- [ ] integridad tenant-aware;
+- [ ] revisión humana de relaciones críticas.
+
+**Gate:** cada nodo afectado por una señal puede explicar por qué está relacionado y a qué organización pertenece.
+
+---
+
+# Fase 5 — Primer ciclo anticipatorio real
+
+Objetivo: cerrar el camino completo con datos reales:
 
 ```text
-/app/now
-/app/events
-/app/events/:id
-/app/memory
-/app/sources
-/app/settings
+FUENTE → OBSERVACIÓN → MATCH → PROPAGACIÓN → CANDIDATO → EVENTO
 ```
 
-**Gate:** build limpio, navegación responsive, roles básicos y aislamiento de organización comprobado.
+Primeras familias recomendadas:
+
+1. `supplier_delay`;
+2. `stockout_risk`;
+3. `delivery_failure_risk`;
+4. `resource_constraint`;
+5. `asset_failure_risk` cuando exista telemetría suficiente.
+
+- [ ] detector/baseline;
+- [ ] candidate generation;
+- [ ] correlación;
+- [ ] event lifecycle;
+- [ ] evidence trace;
+- [ ] predicted impact window;
+- [ ] false-positive review;
+- [ ] versionado de reglas/modelos.
+
+**Gate:** ANTEMANO genera un evento trazable a datos reales sin introducir información ficticia.
 
 ---
 
-# Fase 2 — Canonical Core
+# Fase 6 — Command Center
 
-Objetivo: soportar el ciclo completo de un evento sin modelos sofisticados.
-
-- [ ] Organizations
-- [ ] Users / memberships / roles
-- [ ] Operational nodes
-- [ ] Operational edges
-- [ ] Signal sources
-- [ ] Observations
-- [ ] Model definitions / versions / runs
-- [ ] Event candidates
-- [ ] Events
-- [ ] Evidence
-- [ ] Impact assessments
-- [ ] Scenarios
-- [ ] Recommendations
-- [ ] Decisions
-- [ ] Outcomes
-- [ ] Audit trail
-
-Tests mínimos:
-
-- [ ] aislamiento multi-tenant
-- [ ] deduplicación de observaciones
-- [ ] integridad de edges
-- [ ] ciclo de vida de evento
-- [ ] inmutabilidad de versiones históricas relevantes
-- [ ] outcome separado de predicción
-
-**Gate:** se puede crear y cerrar un evento completamente mediante APIs/servicios sin depender de la UI.
-
----
-
-# Fase 3 — Demo sintética
-
-Objetivo: hacer comprensible el producto antes de conectar un cliente real.
-
-- [ ] Generador determinístico de dataset demo
-- [ ] 2 plantas
-- [ ] 3 líneas
-- [ ] 10 activos
-- [ ] 12 SKU
-- [ ] 2 centros de distribución
-- [ ] 25 clientes
-- [ ] 4 proveedores
-- [ ] 6 materiales
-- [ ] 5 rutas
-- [ ] 30 días de observaciones
-- [ ] 8 eventos históricos
-- [ ] 3 eventos activos
-- [ ] Marca visible `SYNTHETIC DEMO DATA`
-
-Eventos demo:
-
-- [ ] stockout probable
-- [ ] retraso de proveedor
-- [ ] riesgo de falla de activo
-- [ ] evento mitigado
-- [ ] evento materializado
-- [ ] evento descartado
-- [ ] evento con evidencia insuficiente
-- [ ] evento externo con propagación por dependencias
-
-**Gate:** ninguna persona razonable puede confundir la demo con datos productivos reales.
-
----
-
-# Fase 4 — Command Center
-
-Objetivo: demostrar la experiencia diferencial de ANTEMANO.
+Objetivo: hacer que la interfaz priorice decisiones, no fuentes ni gráficos.
 
 ## Ahora
 
-- [ ] resumen de decisiones requeridas
-- [ ] eventos evolucionando
-- [ ] eventos observados
-- [ ] orden operacional relevante
-- [ ] time-to-impact visible
+- [ ] decisiones requeridas;
+- [ ] eventos accionables;
+- [ ] eventos evolucionando;
+- [ ] time-to-impact;
+- [ ] nodo/operación afectada;
+- [ ] evidencia mínima;
+- [ ] responsable y estado.
 
 ## Evento
 
-- [ ] predicción
-- [ ] evidencia
-- [ ] impacto
-- [ ] historial de cambios
-- [ ] decisión requerida
+- [ ] predicción;
+- [ ] ventana de impacto;
+- [ ] evidencia;
+- [ ] dependencias;
+- [ ] historial;
+- [ ] cambios de confianza;
+- [ ] decisión requerida.
 
-## Dependencias
+## Fuentes
 
-- [ ] ruta de propagación
-- [ ] nodos afectados
-- [ ] tipos de relación
-- [ ] explicación del impacto
+Permanece como superficie operacional secundaria para salud, freshness, errores y provenance.
 
-## Simular
-
-- [ ] escenario no-action
-- [ ] alternativa recomendada
-- [ ] alternativa manual
-- [ ] supuestos y confianza
-
-## Memoria
-
-- [ ] predicción original
-- [ ] anticipación real
-- [ ] decisión
-- [ ] outcome
-- [ ] estado final
-
-**Gate:** un ejecutivo puede comprender qué requiere atención y por qué en menos de diez segundos.
+**Gate:** un ejecutivo comprende qué requiere atención y por qué en menos de diez segundos.
 
 ---
 
-# Fase 5 — Primer motor anticipatorio
+# Fase 7 — Impact Engine
 
-Objetivo: demostrar el pipeline con un caso medible.
+Objetivo: explicar por qué el evento importa.
 
-Orden recomendado para demo técnica:
+- [ ] affected nodes;
+- [ ] dependency paths;
+- [ ] magnitud operacional;
+- [ ] exposición por producto/proceso/cliente cuando exista evidencia;
+- [ ] rangos de impacto;
+- [ ] moneda, fuente y timestamp para cifras financieras;
+- [ ] recomputación versionada;
+- [ ] explicación reconstruible.
 
-1. `stockout_risk`
-2. `supplier_delay`
-3. `asset_failure_risk`
-
-El primer motor puede comenzar con reglas y estadística verificable antes de incorporar modelos más sofisticados.
-
-- [ ] baseline
-- [ ] detector v1
-- [ ] model run versionado
-- [ ] candidate generation
-- [ ] event correlation
-- [ ] time-to-impact
-- [ ] evidence trace
-- [ ] offline evaluation
-- [ ] false-positive review
-
-**Gate:** el motor supera su baseline bajo un protocolo de evaluación definido antes de ajustar el modelo.
+**Gate:** ningún impacto se presenta sin fuente y ruta de dependencia verificables.
 
 ---
 
-# Fase 6 — Impact Engine
+# Fase 8 — Decision Loop
 
-Objetivo: demostrar por qué una señal local importa al negocio.
+Objetivo: transformar anticipación en acción controlada.
 
-- [ ] recorrido de dependencias
-- [ ] affected nodes
-- [ ] impacto operacional
-- [ ] rangos de impacto
-- [ ] fuente y moneda para impacto financiero
-- [ ] confidence/evidence
-- [ ] recomputación versionada
+- [ ] escenario de no acción;
+- [ ] alternativas;
+- [ ] restricciones;
+- [ ] supuestos;
+- [ ] recomendación versionada;
+- [ ] aprobación/rechazo humano;
+- [ ] asignación;
+- [ ] auditoría;
+- [ ] outcome capture;
+- [ ] reconciliation.
 
-**Gate:** un impacto puede explicarse y reconstruirse a partir de relaciones y datos fuente.
-
----
-
-# Fase 7 — Decision Loop
-
-Objetivo: cerrar el ciclo sin automatización crítica.
-
-- [ ] scenarios
-- [ ] recommendation
-- [ ] human decision
-- [ ] assignment
-- [ ] outcome capture
-- [ ] reconciliation
-- [ ] historical comparison
-
-**Gate:** ANTEMANO puede responder qué predijo, qué se decidió y qué terminó ocurriendo.
+**Gate:** ANTEMANO puede responder qué predijo, qué recomendó, qué se decidió y qué terminó ocurriendo.
 
 ---
 
-# Fase 8 — ANTEMANO 90 Pilot Readiness
+# Fase 9 — Memory y evaluación continua
 
-Objetivo: estar listos para conectar una operación real de forma segura.
+Objetivo: medir si ANTEMANO realmente aprende y genera tiempo útil.
 
-- [ ] connector SDK mínimo
-- [ ] source health
-- [ ] freshness monitoring
-- [ ] idempotency
-- [ ] retries
-- [ ] audit logging
-- [ ] secrets management
-- [ ] tenant isolation tests
-- [ ] data retention policy
-- [ ] backup/recovery plan
-- [ ] shadow mode
-- [ ] evaluation dashboard
-- [ ] onboarding checklist
-- [ ] pilot runbook
-
-**Gate:** no existe acción autónoma crítica y todos los outputs del modelo son trazables.
-
----
-
-# Fase 9 — Primer piloto real
-
-Objetivo: validar ANTEMANO con 2–3 familias de eventos y datos reales.
-
-## Días 1–15
-
-- mapear operación;
-- mapear decisiones;
-- priorizar eventos;
-- evaluar fuentes;
-- fijar métricas y baseline.
-
-## Días 15–30
-
-- conectar fuentes;
-- construir grafo inicial;
-- reconciliar histórico;
-- validar calidad.
-
-## Días 30–60
-
-- entrenar/configurar detectores;
-- backtesting;
-- calibración;
-- análisis de falsos positivos.
-
-## Días 60–75
-
-- shadow mode;
-- revisión diaria/semanal;
-- outcome reconciliation.
-
-## Días 75–90
-
-- medir anticipación;
-- medir accionabilidad;
-- medir precisión;
-- estimar impacto económico con evidencia;
-- decidir escalar / iterar / detener.
-
----
-
-# Métricas North Star
-
-ANTEMANO no se optimiza por cantidad de alertas.
-
-Prioridad:
+North Stars:
 
 1. **Actionable Lead Time**
 2. **Event Precision**
@@ -316,37 +236,63 @@ Métricas de soporte:
 - false-positive rate;
 - dismissed-event rate;
 - outcome reconciliation coverage;
-- model/version performance.
+- performance por detector/model version.
+
+- [ ] replay temporal;
+- [ ] backtesting sin leakage;
+- [ ] baseline comparison;
+- [ ] drift;
+- [ ] revisión de falsos positivos y negativos;
+- [ ] evaluación por organización y familia de evento.
+
+**Gate:** cada motor puede compararse contra una línea base y contra outcomes reales.
 
 ---
 
-# Riesgos que debemos evitar
+# Fase 10 — Integración enterprise
 
-- convertir ANTEMANO en BI;
-- alert fatigue;
-- usar LLMs donde no corresponde;
-- estimar dinero sin una base verificable;
-- esconder baja calidad de datos detrás de una UI premium;
-- automatizar acciones críticas prematuramente;
-- introducir demasiada infraestructura antes de tener carga real;
-- entrenar sobre outcomes contaminados por decisiones posteriores;
-- hacer scoring que no podamos explicar;
-- construir una demo tan específica para un cliente que deje de ser producto.
+Objetivo: ampliar cobertura sin degradar seguridad ni trazabilidad.
+
+- [ ] SAP / ERP;
+- [ ] WMS / TMS;
+- [ ] MES / SCADA mediante límites read-only adecuados;
+- [ ] CMMS / mantenimiento;
+- [ ] CRM / ventas;
+- [ ] IoT / telemetría;
+- [ ] SSO;
+- [ ] controles de residencia y retención;
+- [ ] private networking cuando sea requerido;
+- [ ] SLA/SLO;
+- [ ] observabilidad y alertamiento operacional.
+
+La expansión se realiza por capacidad y valor operacional, no por una ventana comercial fija.
+
+---
+
+# Reglas que no se negocian
+
+- no datos ficticios en producto;
+- no “modo demo”;
+- no alertas sin evidencia;
+- no cifras económicas sin fuente;
+- no mezcla entre tenants;
+- no LLM como forecaster cuantitativo por defecto;
+- no automatización crítica antes de demostrar seguridad y calidad;
+- no infraestructura especializada sin necesidad medida;
+- no esconder degradación de fuentes;
+- no convertir ANTEMANO en BI.
 
 ---
 
 # Próximo incremento
 
-**Incremento 01 — Canonical Core**
+**Incremento — Real Data Foundation**
 
-Entregables:
-
-1. decisión final de stack;
-2. esquema PostgreSQL v0;
-3. tipos TypeScript;
-4. seed sintético determinístico;
-5. shell visual de ANTEMANO;
-6. primera vista `Ahora` alimentada por datos sintéticos claramente marcados;
-7. tests iniciales de dominio y tenancy.
-
-Éste es el primer incremento que debe producir código ejecutable.
+1. cerrar auth/API boundaries;
+2. endurecer tenancy en Postgres;
+3. normalizar CI y lockfile;
+4. corregir LeyChile;
+5. activar una fuente oficial con persistencia real;
+6. conectar el primer grafo operacional autorizado;
+7. producir el primer Event Candidate persistido basado únicamente en evidencia real;
+8. llevar `Ahora` desde monitor de fuentes a Command Center de eventos.

@@ -32,7 +32,7 @@ export async function discoverGovernmentDatasets(
   const response = await fetch(url, {
     headers: {
       Accept: "application/json",
-      "User-Agent": "N3uralia-ANTES/0.1 (+https://n3uralia.com)",
+      "User-Agent": "N3uralia-ANTEMANO/0.1 (+https://www.antemano.app)",
     },
     cache: "no-store",
     signal: AbortSignal.timeout(10_000),
