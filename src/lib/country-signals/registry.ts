@@ -2,6 +2,7 @@ import { aguasDecimaCurrentSource } from "./connectors/aguas-decima-current";
 import { directemarMarineAlertsSource } from "./connectors/directemar-marine-alerts";
 import { dmcOfficialAlertsSource } from "./connectors/dmc-official-alerts";
 import { muniValdiviaSource } from "./connectors/munivaldivia";
+import { secPowerOutagesSource } from "./connectors/sec-power-outages";
 import { shoaCitsuSource } from "./connectors/shoa-citsu";
 import { chileSignalSources as baseChileSignalSources } from "./registry-base";
 import type { CountrySignalSource } from "./types";
@@ -13,6 +14,7 @@ export const chileSignalSources = [
   directemarMarineAlertsSource,
   shoaCitsuSource,
   muniValdiviaSource,
+  secPowerOutagesSource,
 ] as const satisfies readonly CountrySignalSource[];
 
 export function getCountrySignalSource(sourceId: string): CountrySignalSource | undefined {
