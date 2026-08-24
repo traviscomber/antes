@@ -44,7 +44,7 @@ El servicio oficial DGA/MOP actualiza la vista de alertas aproximadamente cada 1
 
 **Regla de calidad:** la vista DGA genera filas `sin alerta / valor 0` con timestamp de refresh para estaciones sin una alerta activa. Esas filas no son nuevas mediciones y se excluyen de la ingesta. El conector conserva únicamente `mod_indale > 0` (Azul/Amarilla/Roja).
 
-La prueba inicial detectó este comportamiento, eliminó 3.648 filas transitorias sin matches y conservó las alertas reales. Dos ejecuciones posteriores del parser v4 devolvieron 6 alertas actuales con 0 inserts nuevos / 6 duplicados.
+La prueba inicial detectó este comportamiento, eliminó 3.648 filas transitorias sin matches y conservó las alertas reales. Dos ejecuciones posteriores del parser v4 devolvieron 6 alertas actuales con 0 inserts nuevos / 6 duplicadas.
 
 Para anticipación hidrológica previa a la alerta formal necesitaremos una fuente de telemetría de caudal estable distinta de esta vista de alertas; no se inferirá una serie temporal a partir de placeholders.
 
@@ -82,6 +82,37 @@ El servidor ArcGIS 10.2 requiere lotes pequeños. ANTEMANO recupera por object I
 
 Carga productiva completa verificada: **4.569** observaciones. Segunda carga completa: **0 nuevas / 4.569 duplicadas**.
 
+## CONAF — integración en validación
+
+CONAF ya está registrada dentro de la Capa País, pero todavía **no se declara LIVE**. ANTEMANO separa alcance público, descubrimiento del backend y contrato de ingesta para no confundir un dashboard visible con una API estable.
+
+### Pronóstico de incendios
+
+Fuente: `cl.conaf.wildfire-forecast`.
+
+Se cubren las señales oficiales de:
+
+- probabilidad de ignición;
+- humedad del combustible fino y muerto.
+
+CONAF publica los mapas de pronóstico los lunes, miércoles y viernes. El código resuelve programáticamente el item público de ArcGIS Online y sus referencias (`item → web map/layer → FeatureServer/MapServer`). La ingesta permanece deshabilitada hasta validar nombres de campos, unidades, geometría, timestamps, vigencia y cobertura del servicio real.
+
+### Botón Rojo
+
+Fuente: `cl.conaf.boton-rojo`.
+
+CONAF define Botón Rojo cuando coinciden una probabilidad de ignición mayor o igual a 70% y viento mayor o igual a 20 km/h durante la ventana crítica de la tarde. La publicación ofrece proyección de hasta cinco días.
+
+ANTEMANO ya puede auditar el item público de ArcGIS y descubrir servicios vinculados, pero no transforma todavía sus capas en observaciones canónicas hasta verificar el contrato real.
+
+### Incendios activos
+
+Fuente: `cl.conaf.active-fires`.
+
+La página oficial publica situación de incendios con información actualizada cada cinco minutos. El canal observado actualmente está embebido como reporte público y no se ha validado todavía un contrato CONAF/SIDCO estable y machine-readable para uso productivo.
+
+**Regla:** no se hará scraping visual ni se declarará una API inferida como fuente oficial. El conector quedará sin ingesta hasta encontrar y probar un endpoint estructurado con trazabilidad suficiente.
+
 ## Fuentes implementadas que requieren credenciales
 
 ### DMC Weather / WRF
@@ -117,16 +148,15 @@ Conector para USD/CLP y UF. Requiere `BCCH_BDE_TOKEN`.
 
 ## Próximo radar oficial
 
-Prioridad de investigación/implementación:
+Una vez cerrado el contrato productivo de CONAF, la prioridad es:
 
-1. **CONAF** — probabilidad de ignición, humedad de combustible, Botón Rojo e incendios activos;
-2. **Coordinador Eléctrico Nacional** — demanda, generación, transmisión, costos marginales, embalses y combustible;
-3. **SINCA / MMA** — calidad del aire horaria;
-4. **DGA** — embalses, decretos de escasez, restricciones y una fuente estable de telemetría para caudal previo a alerta;
-5. **CNE** — capacidad instalada, generación distribuida, combustibles y factor de emisión;
-6. **ODEPA** — precios/volúmenes agroalimentarios;
-7. **ChileCompra OCDS** — compras y demanda pública en tiempo real;
-8. **SMA / SNIFA + SEA** — fiscalización, sanciones, medidas provisionales y proyectos/pertinencias.
+1. **Coordinador Eléctrico Nacional** — demanda, generación, transmisión, costos marginales, embalses y combustible;
+2. **SINCA / MMA** — calidad del aire horaria;
+3. **DGA** — embalses, decretos de escasez, restricciones y una fuente estable de telemetría para caudal previo a alerta;
+4. **CNE** — capacidad instalada, generación distribuida, combustibles y factor de emisión;
+5. **ODEPA** — precios/volúmenes agroalimentarios;
+6. **ChileCompra OCDS** — compras y demanda pública en tiempo real;
+7. **SMA / SNIFA + SEA** — fiscalización, sanciones, medidas provisionales y proyectos/pertinencias.
 
 ## Contrato canónico
 
