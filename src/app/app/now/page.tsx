@@ -15,7 +15,7 @@ export default async function NowPage() {
     <main className="shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">N3URALIA / ANTES</p>
+          <p className="eyebrow">N3URALIA / ANTEMANO</p>
           <h1>Ahora</h1>
         </div>
         <div className="topbarMeta">
@@ -27,9 +27,9 @@ export default async function NowPage() {
       <section className="heroPanel">
         <div>
           <p className="eyebrow">INTELIGENCIA ANTICIPATORIA</p>
-          <h2>Lo importante no es saber más. Es saber antes.</h2>
+          <h2>Lo importante no es saber más. Es saber de antemano.</h2>
           <p className="lede">
-            ANTES ya puede observar el contexto externo de Chile. Los eventos de
+            ANTEMANO ya puede observar el contexto externo de Chile. Los eventos de
             negocio aparecerán sólo cuando una señal pública tenga una relación
             verificable con el grafo operacional de una organización.
           </p>
@@ -56,7 +56,7 @@ export default async function NowPage() {
           <p className="sectionLabel">DECISIONES</p>
           <h3>Ninguna decisión requerida</h3>
           <p>
-            Aún no existe un grafo operacional conectado. ANTES no convierte una
+            Aún no existe un grafo operacional conectado. ANTEMANO no convierte una
             señal externa en una alerta de negocio sin evidencia de dependencia.
           </p>
         </div>
@@ -118,7 +118,7 @@ export default async function NowPage() {
 
       <footer className="footer">
         <span>OBSERVAR → ANTICIPAR → DECIDIR → ACTUAR → APRENDER</span>
-        <span>ANTES / 0.1</span>
+        <span>ANTEMANO / 0.1</span>
       </footer>
     </main>
   );
