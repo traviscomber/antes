@@ -14,6 +14,7 @@ const OPERATIONAL_SOURCE_IDS = [
   "cl.mop.vialidad.emergencias",
   "cl.mop.emergencias-infraestructura",
   "cl.mma.sinca-air-quality",
+  "cl.munivaldivia.official-context",
 ] as const;
 
 export async function GET(request: NextRequest) {

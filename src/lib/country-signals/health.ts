@@ -27,6 +27,7 @@ import {
   DgaDirectAlertsConnector,
   MopAllInfrastructureEmergenciesConnector,
 } from "./connectors/mop-live-overrides";
+import { MuniValdiviaOfficialContextConnector } from "./connectors/munivaldivia";
 import { ObservatorioLogisticoConnector } from "./connectors/observatorio-logistico";
 import { OdepaWholesaleProduceConnector } from "./connectors/odepa-wholesale";
 import { RioenLineaRegionalNewsConnector } from "./connectors/rioenlinea";
@@ -60,6 +61,7 @@ export async function getChileSignalHealth(): Promise<SourceHealth[]> {
     new SaesaPowerOutageConnector(),
     new AguasDecimaRuntimeConnector(),
     new RioenLineaRegionalNewsConnector(),
+    new MuniValdiviaOfficialContextConnector(),
     ...cenSipSourceIds.map((sourceId) => createCenSipConnector(sourceId)),
     new BancoCentralConnector(),
     new OdepaWholesaleProduceConnector(),
