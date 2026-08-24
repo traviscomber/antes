@@ -1,4 +1,9 @@
-import { createHash, randomBytes } from "node:crypto";
+import {
+  createHash,
+  randomBytes,
+  scryptSync,
+  timingSafeEqual,
+} from "node:crypto";
 import { neon } from "@neondatabase/serverless";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -48,6 +53,42 @@ function tokenHash(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
+function verifyPassword(password: string, encodedHash: string): boolean {
+  const [scheme, nText, rText, pText, saltText, expectedText] =
+    encodedHash.split("$");
+
+  if (
+    scheme !== "scrypt" ||
+    !nText ||
+    !rText ||
+    !pText ||
+    !saltText ||
+    !expectedText
+  ) {
+    return false;
+  }
+
+  const N = Number(nText);
+  const r = Number(rText);
+  const p = Number(pText);
+  if (!Number.isInteger(N) || !Number.isInteger(r) || !Number.isInteger(p)) {
+    return false;
+  }
+
+  const salt = Buffer.from(saltText, "base64url");
+  const expected = Buffer.from(expectedText, "base64url");
+  if (salt.length < 16 || expected.length < 32) return false;
+
+  const actual = scryptSync(password, salt, expected.length, {
+    N,
+    r,
+    p,
+    maxmem: 64 * 1024 * 1024,
+  });
+
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
 export async function isLoginThrottled(email: string): Promise<boolean> {
   const emailKey = normalizeEmail(email);
   if (!emailKey) return false;
@@ -95,6 +136,7 @@ export async function authenticateUser(
   const rows = await db().query<{
     user_id: string;
     email: string;
+    password_hash: string;
     display_name: string | null;
     membership_id: string;
     organization_id: string;
@@ -104,6 +146,7 @@ export async function authenticateUser(
     `select
        u.id::text as user_id,
        u.email,
+       u.password_hash,
        u.display_name,
        m.id::text as membership_id,
        m.organization_id,
@@ -115,14 +158,13 @@ export async function authenticateUser(
      where u.email = $1
        and u.status = 'active'
        and m.status = 'active'
-       and u.password_hash = crypt($2, u.password_hash)
      order by case m.role when 'admin' then 0 else 1 end, m.created_at
      limit 1`,
-    [emailKey, password],
+    [emailKey],
   );
 
   const row = rows[0];
-  if (!row) return null;
+  if (!row || !verifyPassword(password, row.password_hash)) return null;
 
   await db().query(
     `update app_users set last_login_at = now(), updated_at = now() where id = $1`,
