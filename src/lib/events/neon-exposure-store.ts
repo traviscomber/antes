@@ -16,14 +16,13 @@ export class NeonExposureStore {
   }): Promise<void> {
     const { graph } = input;
     await this.db.query(
-      `insert into organizations (id, name, slug, data_mode)
-       values ($1,$2,$3,$4)
+      `insert into organizations (id, name, slug)
+       values ($1,$2,$3)
        on conflict (id) do update set
          name=excluded.name,
          slug=excluded.slug,
-         data_mode=excluded.data_mode,
          updated_at=now()`,
-      [graph.organizationId, input.organizationName, input.organizationSlug, graph.dataMode],
+      [graph.organizationId, input.organizationName, input.organizationSlug],
     );
 
     for (const node of graph.nodes) {

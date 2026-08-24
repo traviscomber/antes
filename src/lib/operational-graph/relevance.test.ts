@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ExternalObservation } from "@/lib/country-signals/types";
-import { syntheticBeverageGraph } from "@/lib/demo/synthetic-graph";
+import { testOperationalGraph } from "@/test/fixtures/operational-graph";
 import { matchObservationToGraph } from "./relevance";
 
 function observation(
@@ -27,28 +27,25 @@ function observation(
 
 describe("matchObservationToGraph", () => {
   it("matches an explicit FX exposure and propagates only downstream", () => {
-    const matches = matchObservationToGraph(
-      observation({}),
-      syntheticBeverageGraph,
-    );
+    const matches = matchObservationToGraph(observation({}), testOperationalGraph);
 
     const nodeIds = new Set(matches.map((match) => match.nodeId));
 
     expect(nodeIds).toEqual(
       new Set([
-        "demo.material.imported-packaging",
-        "demo.plant.metropolitana",
-        "demo.sku.500ml",
-        "demo.dc.metropolitana",
+        "test.material.imported-packaging",
+        "test.plant.metropolitana",
+        "test.sku.500ml",
+        "test.dc.metropolitana",
       ]),
     );
-    expect(nodeIds.has("demo.port.san-antonio")).toBe(false);
+    expect(nodeIds.has("test.port.san-antonio")).toBe(false);
 
     const direct = matches.find(
-      (match) => match.nodeId === "demo.material.imported-packaging",
+      (match) => match.nodeId === "test.material.imported-packaging",
     );
     expect(direct?.ruleId).toBe("signal.binding.exact@1");
-    expect(direct?.pathNodeIds).toEqual(["demo.material.imported-packaging"]);
+    expect(direct?.pathNodeIds).toEqual(["test.material.imported-packaging"]);
   });
 
   it("matches exact commune geography and propagates from the plant", () => {
@@ -65,27 +62,27 @@ describe("matchObservationToGraph", () => {
           commune: "Maipu",
         },
       }),
-      syntheticBeverageGraph,
+      testOperationalGraph,
     );
 
     expect(new Set(matches.map((match) => match.nodeId))).toEqual(
       new Set([
-        "demo.plant.metropolitana",
-        "demo.sku.500ml",
-        "demo.dc.metropolitana",
+        "test.plant.metropolitana",
+        "test.sku.500ml",
+        "test.dc.metropolitana",
       ]),
     );
     expect(
-      matches.find((match) => match.nodeId === "demo.plant.metropolitana")
+      matches.find((match) => match.nodeId === "test.plant.metropolitana")
         ?.ruleId,
     ).toBe("geo.commune.exact@1");
   });
 
   it("does not propagate through an edge explicitly disabled for risk", () => {
     const graph = {
-      ...syntheticBeverageGraph,
-      edges: syntheticBeverageGraph.edges.map((edge) =>
-        edge.id === "demo.edge.material-plant"
+      ...testOperationalGraph,
+      edges: testOperationalGraph.edges.map((edge) =>
+        edge.id === "test.edge.material-plant"
           ? { ...edge, propagatesRisk: false }
           : edge,
       ),
@@ -94,7 +91,7 @@ describe("matchObservationToGraph", () => {
     const matches = matchObservationToGraph(observation({}), graph);
 
     expect(new Set(matches.map((match) => match.nodeId))).toEqual(
-      new Set(["demo.material.imported-packaging"]),
+      new Set(["test.material.imported-packaging"]),
     );
   });
 
@@ -105,7 +102,7 @@ describe("matchObservationToGraph", () => {
         signalType: "economy.uf.clp",
         sourceDataset: "F073.UFF.PRE.Z.D",
       }),
-      syntheticBeverageGraph,
+      testOperationalGraph,
     );
 
     expect(matches).toEqual([]);

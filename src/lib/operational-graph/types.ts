@@ -42,13 +42,8 @@ export interface OperationalEdge {
 
 export interface OperationalGraph {
   organizationId: string;
-  dataMode: "tenant" | "synthetic_demo";
   nodes: OperationalNode[];
   edges: OperationalEdge[];
-}
-
-export interface SyntheticOperationalGraph extends OperationalGraph {
-  dataMode: "synthetic_demo";
 }
 
 export type ObservationMatchType = "geographic" | "dependency" | "manual";

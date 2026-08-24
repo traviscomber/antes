@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ExternalObservation } from "@/lib/country-signals/types";
-import { syntheticBeverageGraph } from "@/lib/demo/synthetic-graph";
+import { testOperationalGraph } from "@/test/fixtures/operational-graph";
 import { matchObservationToGraph } from "@/lib/operational-graph/relevance";
 import { buildExternalSignalCandidate } from "./candidate";
 
@@ -23,23 +23,20 @@ const fxObservation: ExternalObservation = {
 
 describe("buildExternalSignalCandidate", () => {
   it("creates a candidate from direct evidence and explicit propagation paths", () => {
-    const matches = matchObservationToGraph(
-      fxObservation,
-      syntheticBeverageGraph,
-    );
+    const matches = matchObservationToGraph(fxObservation, testOperationalGraph);
     const candidate = buildExternalSignalCandidate(fxObservation, matches);
 
     expect(candidate).not.toBeNull();
     expect(candidate?.state).toBe("observed");
     expect(candidate?.directNodeIds).toEqual([
-      "demo.material.imported-packaging",
+      "test.material.imported-packaging",
     ]);
     expect(new Set(candidate?.affectedNodeIds)).toEqual(
       new Set([
-        "demo.material.imported-packaging",
-        "demo.plant.metropolitana",
-        "demo.sku.500ml",
-        "demo.dc.metropolitana",
+        "test.material.imported-packaging",
+        "test.plant.metropolitana",
+        "test.sku.500ml",
+        "test.dc.metropolitana",
       ]),
     );
     expect(candidate?.propagationPaths.length).toBeGreaterThan(0);
@@ -49,10 +46,7 @@ describe("buildExternalSignalCandidate", () => {
   });
 
   it("does not invent probability, severity, money or a recommended action", () => {
-    const matches = matchObservationToGraph(
-      fxObservation,
-      syntheticBeverageGraph,
-    );
+    const matches = matchObservationToGraph(fxObservation, testOperationalGraph);
     const candidate = buildExternalSignalCandidate(fxObservation, matches);
 
     expect(candidate).not.toHaveProperty("probability");

@@ -94,7 +94,7 @@ async function fetchLatestLawsXml(): Promise<string> {
   const response = await fetch(SERVICE_URL, {
     headers: {
       Accept: "application/xml,text/xml;q=0.9,text/plain;q=0.8,*/*;q=0.5",
-      "User-Agent": "N3uralia-ANTES/0.1 (+https://n3uralia.com)",
+      "User-Agent": "N3uralia-ANTEMANO/0.1 (+https://www.antemano.app)",
     },
     cache: "no-store",
     signal: AbortSignal.timeout(10_000),

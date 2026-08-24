@@ -1,19 +1,21 @@
-# ANTEMANO — Arquitectura MVP
+# ANTEMANO — Arquitectura de Producto
 
 ## Objetivo
 
-ANTEMANO debe transformar señales operacionales dispersas en eventos anticipatorios accionables sin reemplazar los sistemas existentes del cliente.
+ANTEMANO transforma señales operacionales dispersas en eventos anticipatorios accionables sin reemplazar los sistemas existentes del cliente.
 
-El MVP prioriza cuatro propiedades:
+La arquitectura prioriza:
 
-1. **trazabilidad** — cada evento debe poder explicar de dónde vino;
+1. **trazabilidad** — cada evento explica de dónde vino;
 2. **tiempo útil** — una predicción sólo vale si llega dentro de una ventana donde todavía se puede actuar;
-3. **separación entre verdad y predicción** — los modelos nunca sobrescriben hechos canónicos;
-4. **simplicidad operacional** — no introducir infraestructura especializada hasta que exista una necesidad medida.
+3. **separación entre verdad e inferencia** — los modelos nunca sobrescriben hechos canónicos;
+4. **aislamiento por organización** — ningún dato o relación cruza tenants sin contrato explícito;
+5. **simplicidad operacional** — no introducir infraestructura especializada sin necesidad medida;
+6. **datos reales** — el runtime no incorpora un modo demo ni organizaciones ficticias.
 
 ---
 
-## Principio de arquitectura
+## Flujo principal
 
 ```text
 FUENTES
@@ -41,90 +43,72 @@ RESULTADO
 MEMORIA / APRENDIZAJE
 ```
 
-ANTEMANO debe integrarse por encima de ERP, MES, SCADA, WMS, TMS, CRM, IoT y fuentes externas. El sistema de origen continúa siendo dueño de sus hechos.
+El sistema de origen continúa siendo dueño de sus hechos.
 
 ---
 
 ## 1. Fuentes y conectores
 
-Tipos iniciales:
+Fuentes iniciales:
 
-- bases SQL;
+- ERP y bases SQL;
 - APIs REST/GraphQL;
 - archivos estructurados;
 - webhooks;
-- telemetría e IoT;
-- sistemas operacionales del cliente;
-- feeds externos de clima, tráfico, mercado, logística o riesgo.
+- MES / SCADA read-only cuando corresponda;
+- WMS / TMS;
+- CRM;
+- IoT y telemetría;
+- clima, agua, logística, energía, economía, regulación y otras señales externas verificables.
 
-Cada conector debe declarar:
+Cada conector declara:
 
 - sistema de origen;
 - propietario del dato;
 - frecuencia/frescura esperada;
-- alcance de datos;
-- método de autenticación;
-- política de reintentos;
+- alcance;
+- autenticación;
+- retries;
 - identificador de idempotencia;
-- clasificación de sensibilidad.
+- clasificación de sensibilidad;
+- parser/version;
+- health contract.
 
-Los conectores no deben convertir silenciosamente una fuente externa en verdad canónica de ANTEMANO.
+Una fuente externa nunca se convierte silenciosamente en verdad canónica del cliente.
 
 ---
 
 ## 2. Capa canónica de datos
 
-### Recomendación MVP
+**PostgreSQL** es el sistema transaccional principal mientras satisfaga volumen, latencia y costo.
 
-**PostgreSQL** como sistema transaccional principal.
+Postgres conserva:
 
-Razones:
-
-- entidades y relaciones operacionales son naturalmente relacionales;
-- integridad referencial;
-- auditoría;
-- consultas temporales;
-- JSONB sólo donde aporta flexibilidad real;
-- capacidades suficientes para el primer grafo operacional;
-- evita introducir un segundo motor de datos prematuramente.
-
-### Qué vive en Postgres
-
-- organizaciones y usuarios;
-- nodos operacionales;
-- relaciones/dependencias;
-- fuentes y señales normalizadas;
-- eventos;
-- evidencia y referencias;
-- impactos;
-- escenarios;
+- organizaciones, usuarios, memberships y roles;
+- nodos y relaciones operacionales;
+- fuentes y observaciones normalizadas;
+- eventos candidatos y eventos;
+- evidencia referenciada;
+- impactos y escenarios;
 - recomendaciones;
-- decisiones;
-- outcomes;
+- decisiones y outcomes;
 - versiones de modelos y ejecuciones;
 - auditoría.
 
-### Qué no debe vivir como fila transaccional grande
-
-- archivos completos;
-- dumps masivos de sensores;
-- documentos binarios;
-- payloads históricos pesados que sólo sirven como evidencia.
-
-Esos elementos deben almacenarse en object storage y referenciarse por ID/URI controlada.
+Archivos, dumps y evidencia binaria pesada se mantienen fuera de filas transaccionales y se referencian desde el dominio.
 
 ---
 
 ## 3. Grafo operacional
 
-Para el MVP el grafo se implementa sobre Postgres mediante dos conceptos:
+El grafo comienza sobre Postgres mediante:
 
 ```text
 operational_nodes
 operational_edges
 ```
 
-Un nodo representa una entidad relevante para propagación de impacto:
+Nodos posibles:
 
 - proveedor;
 - material;
@@ -140,78 +124,50 @@ Un nodo representa una entidad relevante para propagación de impacto:
 - recurso;
 - ubicación.
 
-Un edge expresa una relación dirigida y tipada:
+Cada edge es dirigido, tipado, temporal cuando corresponda y trazable a su fuente.
 
-```text
-Proveedor --supplies--> Material
-Material --required_by--> Línea
-Línea --produces--> SKU
-SKU --stored_at--> CD
-CD --serves--> Cliente
-```
-
-La primera implementación debe favorecer relaciones explícitas y consultables sobre grafos opacos almacenados en JSON.
-
-Un motor de grafos dedicado sólo se evaluará si aparecen consultas de profundidad, volumen o latencia que Postgres no pueda resolver económicamente.
+Un motor de grafos dedicado sólo se evaluará si profundidad, volumen o latencia demuestran que Postgres ya no es suficiente.
 
 ---
 
-## 4. Señales y observaciones
+## 4. Observaciones
 
-Una **observación** es un hecho recibido de una fuente.
-
-Ejemplos:
-
-- temperatura = 82.4 °C;
-- inventario = 1.240 unidades;
-- ETA = 6.3 horas;
-- forecast meteorológico = lluvia severa;
-- orden = retrasada;
-- vibración RMS = valor X.
-
-Una observación no es todavía un evento.
+Una observación es un hecho recibido desde una fuente.
 
 Debe conservar:
 
-- timestamp del hecho;
-- timestamp de recepción;
-- fuente;
-- entidad asociada;
-- valor/payload normalizado;
+- `observed_at`;
+- `published_at` cuando exista;
+- `ingested_at`;
+- fuente y dataset;
+- geografía o entidad asociada;
+- valor normalizado;
 - referencia a evidencia original;
 - calidad/frescura;
-- identificador de deduplicación.
+- idempotency/deduplication key;
+- parser/version.
 
-Para altos volúmenes se podrá particionar por tiempo y organización. No se agrega un motor time-series separado hasta contar con evidencia de necesidad.
+Una observación no es todavía un evento.
 
 ---
 
 ## 5. Detección y modelos
 
-ANTEMANO puede ejecutar distintos tipos de detectores:
+ANTEMANO puede ejecutar:
 
 - reglas determinísticas;
-- detección de anomalías;
+- anomalías;
 - forecasting;
 - clasificación;
-- modelos de supervivencia / tiempo-a-falla;
+- modelos de supervivencia;
 - optimización;
 - modelos causales;
 - visión computacional;
 - modelos generativos para información no estructurada.
 
-Cada ejecución debe registrar:
+Cada ejecución registra versión, ventana de datos, inputs, outputs, confianza disponible, timestamp y estado.
 
-- modelo/detector;
-- versión;
-- ventana de datos;
-- input referenciado;
-- output;
-- confianza disponible;
-- timestamp;
-- estado de ejecución.
-
-Los outputs son **derivados** y nunca reemplazan hechos canónicos.
+Los outputs son derivados y nunca reemplazan hechos canónicos.
 
 ---
 
@@ -219,22 +175,9 @@ Los outputs son **derivados** y nunca reemplazan hechos canónicos.
 
 Los detectores producen `event_candidates`.
 
-La capa de correlación decide si varias señales representan un único evento operacional.
+La correlación decide si una o varias señales representan un mismo evento operacional.
 
-Ejemplo:
-
-```text
-vibración anómala
-+ aumento de temperatura
-+ deterioro de ciclo
-+ historial de mantenimiento
-=
-probable riesgo de falla de activo
-```
-
-El resultado es un `event` trazable a sus candidatos y evidencia.
-
-Estados iniciales:
+Estados de evento previstos:
 
 ```text
 observing
@@ -246,47 +189,43 @@ dismissed
 expired
 ```
 
-No todos los candidatos deben convertirse en alertas visibles.
+No todos los candidatos llegan al Command Center.
 
 ---
 
 ## 7. Time-to-Impact
 
-Cada evento debe intentar estimar una **ventana de impacto**, no sólo una prioridad abstracta.
-
-Ejemplos:
+Cada evento intenta expresar una ventana:
 
 ```text
-impact_start_at
-impact_end_at
+predicted_impact_start_at
+predicted_impact_end_at
 ```
 
-La UI debe expresar el tiempo restante de manera comprensible.
+La prioridad no se reduce a un score abstracto. La interfaz debe responder cuánto tiempo útil queda y qué limita esa estimación.
 
-El algoritmo interno que prioriza eventos es parte de la lógica propietaria del producto y no debe documentarse públicamente en detalle.
+Los algoritmos internos de priorización forman parte de la lógica propietaria y no se documentan públicamente en detalle.
 
 ---
 
 ## 8. Impacto
 
-El motor de impacto recorre dependencias relevantes del grafo para identificar:
+El Impact Engine recorre dependencias para identificar:
 
 - nodos afectados;
-- rutas de dependencia;
+- rutas de propagación;
 - procesos comprometidos;
-- clientes/productos potencialmente expuestos;
+- productos/clientes potencialmente expuestos cuando exista evidencia;
 - magnitudes operacionales;
-- estimaciones económicas cuando exista evidencia suficiente.
+- estimaciones económicas trazables.
 
-Toda cifra económica debe indicar fuente, moneda, timestamp y nivel de confianza.
-
-Nunca se debe presentar una cifra simulada como impacto real.
+Toda cifra económica indica fuente, moneda, timestamp y supuestos.
 
 ---
 
 ## 9. Escenarios y decisión
 
-Un evento puede producir uno o más escenarios.
+Un evento puede producir escenarios comparables:
 
 ```text
 Evento
@@ -295,65 +234,54 @@ Evento
  └─ Acción B
 ```
 
-Cada escenario puede contener:
+Cada escenario puede contener efectos esperados, costo, riesgo residual, restricciones, supuestos y evidencia.
 
-- descripción;
-- supuestos;
-- efectos esperados;
-- costo estimado;
-- riesgo residual;
-- restricciones;
-- evidencia.
-
-En el MVP las acciones críticas requieren aprobación humana.
+Las acciones críticas requieren aprobación humana hasta que exista autorización y control explícitos para otra cosa.
 
 ---
 
 ## 10. ANTEMANO Memory
 
-La memoria operacional cierra el ciclo:
-
 ```text
 Evento → Predicción → Recomendación → Decisión → Resultado
 ```
 
-Debe permitir responder posteriormente:
+Debe permitir reconstruir:
 
-- ¿qué predijimos?;
-- ¿con cuánto tiempo?;
-- ¿qué evidencia teníamos?;
-- ¿qué decidió el usuario?;
-- ¿qué ocurrió realmente?;
-- ¿cuál fue la diferencia entre escenario esperado y resultado?;
-- ¿el evento era accionable?;
+- qué se predijo;
+- con cuánto tiempo;
+- qué evidencia existía en ese momento;
+- qué recomendó el sistema;
+- qué decidió el usuario;
+- qué ocurrió realmente;
+- cuánto difirió el resultado del escenario esperado.
 
-Esta información alimenta evaluación y mejora de modelos, pero los outcomes reales siguen siendo hechos separados de las inferencias del sistema.
+Outcomes reales permanecen separados de inferencias.
 
 ---
 
 ## 11. Asincronía
 
-Se utilizarán jobs/colas sólo para tareas que requieran durabilidad o procesamiento fuera de una request:
+Jobs/colas sólo se introducen para tareas que requieran durabilidad, reintentos o ejecución fuera de una request:
 
-- ingesta pesada;
-- reintentos de conectores;
+- ingesta;
 - ejecución de modelos;
 - correlación;
 - cálculo de impacto;
-- generación de escenarios;
-- notificaciones.
+- notificaciones;
+- reconciliación.
 
-Cada job debe ser idempotente y observable.
+Cada job debe ser idempotente, acotado y observable.
 
-Para el MVP puede comenzar con una cola administrada compatible con el entorno de despliegue. Kafka o streaming dedicado no son una dependencia inicial.
+Kafka o streaming dedicado no son dependencias base.
 
 ---
 
 ## 12. API
 
-La API debe exponer conceptos de dominio, no tablas físicas.
+La API expone conceptos de dominio, no tablas físicas.
 
-Recursos iniciales:
+Recursos previstos:
 
 ```text
 /organizations
@@ -367,32 +295,34 @@ Recursos iniciales:
 /outcomes
 ```
 
+Las rutas internas deben exigir autenticación/autorización antes de conectar datos corporativos.
+
 Los writes críticos deben soportar idempotencia y auditoría.
 
 ---
 
 ## 13. Seguridad y tenancy
 
-ANTEMANO se diseña multi-organización desde el inicio.
-
-Todos los recursos protegidos deben tener una ruta explícita hacia `organization_id`.
+Todos los recursos protegidos tienen una ruta explícita hacia `organization_id`.
 
 Roles iniciales:
 
-- `viewer` — lectura;
-- `operator` — revisión y gestión de eventos;
-- `decision_maker` — registra/aprueba decisiones;
-- `admin` — configuración de organización y fuentes;
-- `service` — identidad de máquina limitada a su integración.
+- `viewer`;
+- `operator`;
+- `decision_maker`;
+- `admin`;
+- `service`.
 
 Principios:
 
 - mínimo privilegio;
-- secretos sólo server-side;
-- auditoría de cambios;
-- segregación entre datos de clientes;
-- trazabilidad de decisiones;
-- permisos de acciones críticos explícitos.
+- secretos server-side;
+- constraints tenant-aware;
+- auditoría;
+- segregación de organizaciones;
+- APIs internas protegidas;
+- rate limiting en llamadas que consumen proveedores externos;
+- decisiones críticas trazables.
 
 ---
 
@@ -401,51 +331,50 @@ Principios:
 Métricas mínimas:
 
 - salud de conectores;
-- lag de ingesta;
+- source freshness;
+- ingestion lag;
 - observaciones procesadas;
 - fallos/reintentos;
-- latencia de detección;
-- latencia de correlación;
-- eventos creados;
-- falsos positivos confirmados;
-- modelos por versión;
+- latencia de detección y correlación;
+- candidatos/eventos creados;
+- falsos positivos;
+- versiones de modelos;
 - decisiones registradas;
-- outcomes pendientes de reconciliación.
+- outcomes pendientes.
 
 La confiabilidad del pipeline es parte del producto.
 
 ---
 
-## 15. Frontend MVP
+## 15. Frontend
 
-Cinco superficies iniciales:
+Superficies principales:
 
 1. **Ahora** — eventos que requieren atención;
 2. **Evento** — predicción, evidencia, impacto y ventana temporal;
-3. **Dependencias** — ruta del grafo operacional afectada;
-4. **Simular** — comparar escenarios;
-5. **Memoria** — predicciones, decisiones y outcomes históricos.
+3. **Dependencias** — ruta afectada;
+4. **Simular** — alternativas y supuestos;
+5. **Memoria** — predicciones, decisiones y outcomes;
+6. **Fuentes** — salud y trazabilidad del pipeline.
 
-La interfaz no debe convertirse en un BI genérico.
+La interfaz no debe convertirse en BI genérico ni fabricar contenido para llenar estados vacíos.
 
 ---
 
-## 16. Stack lógico inicial
-
-Sin fijar proveedores innecesariamente:
+## 16. Stack lógico
 
 ```text
 Web application        → React / Next.js
 API / orchestration    → server-side TypeScript
 Canonical database     → PostgreSQL
-Raw evidence           → object storage
-Async processing       → managed durable queue/jobs
+Raw evidence           → object storage cuando sea necesario
+Async processing       → managed durable jobs/queue cuando sea necesario
 AI / ML                → provider-abstracted model layer
 Observability          → logs + metrics + traces
 Deployment             → managed cloud runtime
 ```
 
-La selección exacta de proveedor debe hacerse cuando existan requisitos de despliegue, identidad, volumen y datos del primer piloto.
+La selección de componentes adicionales depende de requisitos reales de seguridad, volumen, identidad, residencia de datos, latencia y costo.
 
 ---
 
@@ -459,6 +388,7 @@ La selección exacta de proveedor debe hacerse cuando existan requisitos de desp
 - digital twin 3D;
 - scoring opaco sin evidencia;
 - vector database para datos estructurados;
-- infraestructura multi-cloud antes del primer piloto.
+- infraestructura multi-cloud sin requisito real;
+- un modo demo o runtime basado en datos ficticios.
 
-El MVP debe demostrar una cosa: **ANTEMANO puede crear tiempo útil antes de un impacto real.**
+ANTEMANO debe demostrar una cosa con evidencia real: **crear tiempo útil antes de un impacto real.**

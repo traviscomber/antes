@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSession, isAdmin } from "@/lib/auth/session";
 import { discoverGovernmentDatasets } from "@/lib/country-signals/source-discovery";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+  if (!isAdmin(session)) {
+    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+  }
+
   const query = request.nextUrl.searchParams.get("q")?.trim() ?? "";
 
   if (!query) {
