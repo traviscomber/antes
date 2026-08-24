@@ -4,6 +4,7 @@ import { createCenSipConnector } from "./cen-sip";
 import { CneGenerationConnector } from "./cne-generation";
 import { ConafActiveFiresConnector } from "./conaf-active-fires";
 import { ConafWildfireForecastConnector } from "./conaf";
+import { DgaVipNetReservoirConnector } from "./dga-vipnet";
 import { DmcWrfConnector } from "./dmc";
 import { LeyChileConnector } from "./leychile";
 import {
@@ -31,6 +32,8 @@ export function createCountrySignalConnector(
       return new LeyChileConnector();
     case "cl.dga.hydrometric":
       return new DgaDirectAlertsConnector();
+    case "cl.dga.reservoirs-vipnet":
+      return new DgaVipNetReservoirConnector();
     case "cl.mop.vialidad.emergencias":
       return new VialidadEmergenciesConnector();
     case "cl.mop.vialidad.pasos-fronterizos":
