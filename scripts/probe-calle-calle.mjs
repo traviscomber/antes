@@ -1,27 +1,30 @@
 const api = 'https://vipnet.mop.gob.cl';
-const home = await (await fetch(`${api}/`, { signal: AbortSignal.timeout(15000) })).text();
-const scripts = [...home.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map((match) => new URL(match[1], `${api}/`).toString());
-for (const scriptUrl of scripts) {
-  const js = await (await fetch(scriptUrl, { signal: AbortSignal.timeout(15000) })).text();
-  const needle = 'return this.vipnetService.getStationValues(r).subscribe';
-  const index = js.indexOf(needle);
-  if (index >= 0) {
-    console.log('VIPNET_STATION_VALUES_CALLSITE', JSON.stringify({
-      script: scriptUrl.split('/').pop(),
-      snippet: js.slice(Math.max(0, index - 12000), index + 1800).replace(/\s+/g, ' '),
+const stationCode = '10122003-6';
+const now = new Date(Date.now() - 60 * 60 * 1000);
+const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' }).formatToParts(now);
+const read = (type) => parts.find((part) => part.type === type)?.value ?? '';
+const fetchDay = `${read('year')}-${read('month')}-${read('day')}`;
+const fetchHour = Number(read('hour'));
+const headers = { Accept: 'application/json', 'Content-Type': 'application/json', Origin: api, Referer: `${api}/` };
+
+for (const tipoEstacion of [0,1,2,3,4,5,6,7,10,11,71]) {
+  try {
+    const response = await fetch(`${api}/v1/vipnet/estacion/valores`, {
+      method: 'POST', headers,
+      body: JSON.stringify({ codigoEstacion: stationCode, tipoEstacion, fetchHour, fetchDay, hoursRange: 24 }),
+      signal: AbortSignal.timeout(12000),
+    });
+    const text = await response.text();
+    let payload = null;
+    try { payload = JSON.parse(text); } catch {}
+    const data = Array.isArray(payload?.data) ? payload.data : [];
+    console.log('VIPNET_STATION_SERIES', JSON.stringify({
+      tipoEstacion, status: response.status, contentType: response.headers.get('content-type'), textLength: text.length,
+      rows: data.length, first: data[0] ?? null, last: data.at(-1) ?? null,
+      values: data.slice(-8).map((row) => row.instantaneo),
+      bodyPrefix: text.slice(0, 180),
     }));
-  }
-  for (const token of ['codigoEstacion:', 'parametro:', 'tipoParametro:', 'codigoParametro:', 'fechaGte:', 'fechaLte:', 'dateGte:', 'dateLte:']) {
-    const indexes = [];
-    let from = 0;
-    while (indexes.length < 8) {
-      const found = js.indexOf(token, from);
-      if (found < 0) break;
-      indexes.push(found);
-      from = found + token.length;
-    }
-    for (const found of indexes) {
-      console.log('VIPNET_BODY_HINT', JSON.stringify({ token, snippet: js.slice(Math.max(0, found - 800), found + 1500).replace(/\s+/g, ' ') }));
-    }
+  } catch (error) {
+    console.log('VIPNET_STATION_SERIES', JSON.stringify({ tipoEstacion, error: String(error).slice(0, 180) }));
   }
 }
