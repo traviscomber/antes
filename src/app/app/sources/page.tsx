@@ -19,7 +19,7 @@ export default async function SourcesPage() {
     <main className="shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">N3URALIA / ANTES</p>
+          <p className="eyebrow">N3URALIA / ANTEMANO</p>
           <h1>Fuentes</h1>
         </div>
         <div className="topbarMeta">
@@ -34,7 +34,7 @@ export default async function SourcesPage() {
           <p className="eyebrow">OBSERVABILIDAD</p>
           <h2>Una señal sin trazabilidad no entra.</h2>
           <p className="lede">
-            Estado de conectores oficiales, persistencia e ingestiones. ANTES separa
+            Estado de conectores oficiales, persistencia e ingestiones. ANTEMANO separa
             disponibilidad de la fuente de evidencia efectivamente almacenada.
           </p>
         </div>
@@ -112,7 +112,7 @@ export default async function SourcesPage() {
 
       <footer className="footer">
         <span>FUENTE → INGESTIÓN → EVIDENCIA → RELEVANCIA</span>
-        <span>ANTES / SOURCES</span>
+        <span>ANTEMANO / SOURCES</span>
       </footer>
     </main>
   );
