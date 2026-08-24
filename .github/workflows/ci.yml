@@ -23,8 +23,10 @@ jobs:
         with:
           node-version: 22
 
+      # Temporary workaround for npm Arborist `edgesOut` peer-resolution crash.
+      # Remove once a committed lockfile makes installs deterministic.
       - name: Install
-        run: npm install
+        run: npm install --legacy-peer-deps
 
       - name: Typecheck
         run: npm run typecheck
