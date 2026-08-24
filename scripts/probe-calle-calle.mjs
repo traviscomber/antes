@@ -18,25 +18,29 @@ const read = (type) => parts.find((part) => part.type === type)?.value ?? '';
 const fetchDay = `${read('year')}-${read('month')}-${read('day')}`;
 const fetchHour = Number(read('hour'));
 
-for (let tipoEstacion = 0; tipoEstacion <= 7; tipoEstacion += 1) {
-  try {
-    const vipResponse = await fetch('https://vipnet.mop.gob.cl/v1/vipnet/estaciones/valor', {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json', 'Content-Type': 'application/json',
-        Origin: 'https://vipnet.mop.gob.cl', Referer: 'https://vipnet.mop.gob.cl/',
-      },
-      body: JSON.stringify({ tipoEstacion, mapStatistic: 4, currentTabIndex: 0, fetchHour, fetchDay, hoursRange: 3 }),
-      signal: AbortSignal.timeout(15000),
-    });
-    const vip = await vipResponse.json();
-    const rows = Array.isArray(vip.data) ? vip.data : [];
-    const matches = rows.filter((row) => {
-      const haystack = JSON.stringify(row).toLowerCase();
-      return haystack.includes('10122003') || haystack.includes('pupunahue') || haystack.includes('calle - calle') || haystack.includes('calle calle');
-    });
-    console.log('CALLE_CALLE_VIPNET', JSON.stringify({ tipoEstacion, status: vipResponse.status, rows: rows.length, matches }));
-  } catch (error) {
-    console.log('CALLE_CALLE_VIPNET', JSON.stringify({ tipoEstacion, error: String(error).slice(0, 180) }));
+for (const tipoEstacion of [0, 1, 2, 3, 4, 5]) {
+  const vipResponse = await fetch('https://vipnet.mop.gob.cl/v1/vipnet/estaciones/valor', {
+    method: 'POST',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json', Origin: 'https://vipnet.mop.gob.cl', Referer: 'https://vipnet.mop.gob.cl/' },
+    body: JSON.stringify({ tipoEstacion, mapStatistic: 4, currentTabIndex: 0, fetchHour, fetchDay, hoursRange: 3 }),
+    signal: AbortSignal.timeout(15000),
+  });
+  const vip = await vipResponse.json();
+  const rows = Array.isArray(vip.data) ? vip.data : [];
+  const matches = rows.filter((row) => JSON.stringify(row).toLowerCase().includes('10122003'));
+  console.log('CALLE_CALLE_VIPNET', JSON.stringify({ tipoEstacion, status: vipResponse.status, rows: rows.length, matches }));
+}
+
+const home = await (await fetch('https://vipnet.mop.gob.cl/', { signal: AbortSignal.timeout(15000) })).text();
+const scripts = [...home.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map((match) => new URL(match[1], 'https://vipnet.mop.gob.cl/').toString());
+console.log('VIPNET_SCRIPTS', JSON.stringify({ count: scripts.length, scripts }));
+for (const scriptUrl of scripts) {
+  const js = await (await fetch(scriptUrl, { signal: AbortSignal.timeout(15000) })).text();
+  const tokens = ['Caudal', 'Nivel', 'Precip', 'Temperatura', 'Humedad', 'tipoEstacion'];
+  for (const token of tokens) {
+    const index = js.toLowerCase().indexOf(token.toLowerCase());
+    if (index >= 0) {
+      console.log('VIPNET_BUNDLE_HINT', JSON.stringify({ script: scriptUrl.split('/').pop(), token, snippet: js.slice(Math.max(0, index - 240), index + 520).replace(/\s+/g, ' ') }));
+    }
   }
 }
