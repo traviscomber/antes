@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/probe-munivaldivia.mjs && next build",
+    "build": "node scripts/probe-munivaldivia.mjs && vitest run src/lib/country-signals/connectors/munivaldivia.test.ts && next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
