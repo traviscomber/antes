@@ -138,7 +138,7 @@ export default async function NowPage() {
               <div className="sourceCardTop">
                 <div>
                   <p className="sourceAuthority">{signal.sourceName}</p>
-                  <h4>{signalLabel(signal.signalType)}</h4>
+                  <h4>{personalSignalLabel(signal)}</h4>
                 </div>
                 <span className="statusBadge neutral">{personalRelevanceLabel(signal)}</span>
               </div>
@@ -151,7 +151,7 @@ export default async function NowPage() {
               </p>
 
               <dl className="sourceMeta">
-                <div><dt>Observado</dt><dd>{formatChileDate(signal.observedAt)}</dd></div>
+                <div><dt>Precio / señal</dt><dd>{formatChileDate(signal.observedAt)}</dd></div>
                 <div><dt>Ubicación</dt><dd>{signalLocation(signal)}</dd></div>
                 <div><dt>Relevancia</dt><dd>{personalReason(signal)}</dd></div>
               </dl>
@@ -351,9 +351,12 @@ function profileDetail(snapshot: NowSnapshot): string {
   const profile = snapshot.profile;
   if (!profile) return "Configura ubicación, vehículo, combustible y capacidad de estanque.";
   if (profile.fuelType && profile.tankCapacityLiters) {
-    return `Cuando exista precio CNE regional para ${fuelTypeLabel(profile.fuelType)}, ANTEMANO calculará cuánto cuesta llenar ${profile.tankCapacityLiters} litros.`;
+    return `ANTEMANO cruza ${fuelTypeLabel(profile.fuelType)} con Bencina en Línea y calcula el costo real de llenar ${profile.tankCapacityLiters} litros cuando existe un precio vigente cerca.`;
   }
-  return "Completa auto, tipo de combustible y litros de estanque para convertir señales de precio en impacto personal.";
+  if (profile.fuelType) {
+    return `Ya filtramos Bencina en Línea por ${fuelTypeLabel(profile.fuelType)}. Agrega los litros del estanque para convertir cada precio en costo de carga completa.`;
+  }
+  return "Elige 93, 95, 97 o diésel para dejar sólo tu combustible; agrega los litros del estanque para calcular tu costo real.";
 }
 
 function countryStatus(snapshot: NowSnapshot): string {
@@ -408,6 +411,19 @@ function alertLevelLabel(level: PersonalAlert["level"]): string {
   return "VIGILAR";
 }
 
+function personalSignalLabel(signal: PersonalSignal): string {
+  if (signal.signalType === "energy.fuel.station.retail_price") {
+    const labels: Record<string, string> = {
+      gasoline_93: "Bencina 93",
+      gasoline_95: "Bencina 95",
+      gasoline_97: "Bencina 97",
+      diesel: "Diésel",
+    };
+    return `${labels[signal.profileFuelType ?? ""] ?? "Combustible"} · precio cercano`;
+  }
+  return signalLabel(signal.signalType);
+}
+
 function signalLabel(value: string): string {
   const labels: Record<string, string> = {
     "fire.ignition_probability.forecast": "Probabilidad de ignición",
@@ -430,6 +446,7 @@ function signalLabel(value: string): string {
     "economy.agriculture.wholesale_price.average": "Precio mayorista agrícola",
     "economy.agriculture.wholesale_volume": "Volumen mayorista agrícola",
     "energy.generation.monthly_mwh": "Generación eléctrica mensual",
+    "energy.fuel.station.retail_price": "Precio de combustible en estación",
     "energy.fuel.liquid.retail_price_regional": "Precio regional de combustible",
     "energy.fuel.liquid.sales_volume_monthly": "Venta de combustibles",
     "seismic.earthquake.event": "Sismo",
@@ -459,6 +476,10 @@ function personalReason(signal: PersonalSignal): string {
 }
 
 function personalReasonDetail(signal: PersonalSignal): string {
+  if (signal.signalType === "energy.fuel.station.retail_price") {
+    const where = signal.distanceKm !== undefined ? `a ${signal.distanceKm.toFixed(1)} km` : "en tu zona";
+    return `Menor precio vigente encontrado para este combustible ${where}`;
+  }
   if (signal.relevance === "comuna") return "Coincide con tu comuna";
   if (signal.relevance === "cercania") return `A ${Math.round(signal.distanceKm ?? 0)} km de tu ubicación de referencia`;
   return "Coincide con tu región";
