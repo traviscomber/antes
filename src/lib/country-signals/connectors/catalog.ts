@@ -15,6 +15,7 @@ import {
   MopAllInfrastructureEmergenciesConnector,
 } from "./mop-live-overrides";
 import { ObservatorioLogisticoConnector } from "./observatorio-logistico";
+import { SincaAirQualityConnector } from "./sinca";
 
 export function createCountrySignalConnector(
   sourceId: string,
@@ -22,6 +23,8 @@ export function createCountrySignalConnector(
   switch (sourceId) {
     case "cl.dmc.wrf":
       return new DmcWrfConnector();
+    case "cl.mma.sinca-air-quality":
+      return new SincaAirQualityConnector();
     case "cl.mtt.observatorio-logistico":
       return new ObservatorioLogisticoConnector();
     case "cl.bcn.leychile":
