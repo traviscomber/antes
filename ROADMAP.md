@@ -1,298 +1,222 @@
 # ANTEMANO — Roadmap de Producto
 
+**Estado canónico: 24 de agosto de 2026**
+
 ## Norte
 
-Construir ANTEMANO como un producto operacional real: conectar señales verificables, entender dependencias, detectar eventos antes del impacto y ayudar a decidir dentro de una ventana útil.
+ANTEMANO observa señales verificables de Chile, las territorializa para cada perfil y transforma evidencia real en tiempo útil para decidir.
 
-No existe una fase de demo ni un piloto comercial de 90 días. El producto se activa progresivamente sobre datos y operaciones reales, con shadow mode como control de seguridad.
+Valdivia / Los Ríos es el territorio actual de validación real, no el alcance del producto. La arquitectura debe mantenerse nacional y permitir adaptadores regionales, comunales y por proveedor sin duplicar parsers ni hardcodear territorios.
 
----
-
-# Fase 0 — Fundamento
-
-**Estado:** completado en lo esencial.
-
-- [x] posicionamiento de ANTEMANO;
-- [x] arquitectura conceptual;
-- [x] modelo canónico de eventos;
-- [x] primeras familias de eventos;
-- [x] contratos TypeScript iniciales;
-- [x] esquema Postgres inicial;
-- [x] Capa País Chile;
-- [x] Event Graph inicial;
-- [x] Event Candidate sin probabilidad ni impacto inventados;
-- [x] shell inicial `Ahora` y `Fuentes`;
-- [x] deployment Vercel;
-- [x] dominio `antemano.app`.
-
-**Gate:** el dominio separa hechos, inferencias, decisiones y outcomes.
+No existe modo demo ni piloto comercial artificial. Producción usa datos reales, estados vacíos honestos y fail-closed cuando una fuente no puede comprobarse.
 
 ---
 
-# Fase 1 — Hardening
+# 1. Fundamento — COMPLETADO
 
-**Estado:** siguiente incremento obligatorio.
+- [x] dominio y deployment `antemano.app`;
+- [x] Next.js + TypeScript + Vercel;
+- [x] Neon/Postgres para observaciones, runs y perfiles;
+- [x] modelo canónico de observación/evidencia;
+- [x] provenance y deduplicación;
+- [x] perfil territorial con región, comuna y coordenadas;
+- [x] alertas personales derivadas de evidencia;
+- [x] superficies `Ahora`, `Fuentes`, `Perfil`, `Grafo` y combustible;
+- [x] CI con typecheck, lint, tests y build;
+- [x] cron protegido con `CRON_SECRET`.
 
-Objetivo: preparar el producto para recibir datos operacionales reales sin exponer secretos, mezclar tenants ni depender de instalaciones no determinísticas.
-
-- [ ] repositorio y módulos propietarios con exposición adecuada;
-- [ ] eliminar residuos de marca y superficies demo;
-- [ ] lockfile y `npm ci`;
-- [ ] alinear versión Node entre CI y Vercel;
-- [ ] auth para `/app`;
-- [ ] proteger APIs internas;
-- [ ] rate limiting en endpoints que consultan terceros;
-- [ ] roles y memberships;
-- [ ] constraints tenant-aware en Postgres;
-- [ ] pruebas negativas de aislamiento;
-- [ ] error tracking y logs estructurados;
-- [ ] runbook de recuperación.
-
-**Gate:** ninguna ruta protegida puede leer o escribir fuera de su organización y ninguna credencial llega al navegador, Git o logs.
+**Gate actual:** producción compila, persiste y recalcula alertas sin depender de datos simulados.
 
 ---
 
-# Fase 2 — Persistencia productizable
+# 2. Capa País — OPERATIVA Y EN EXPANSIÓN
 
-Objetivo: convertir la rama de persistencia en una base reproducible y separada por ambiente.
+## Críticas / 5 minutos
 
-- [ ] migración canónica versionada;
-- [ ] desarrollo / preview / producción separados;
-- [ ] `DATABASE_URL` server-side por ambiente;
-- [ ] health de base;
-- [ ] source ingestion runs;
-- [ ] idempotencia;
-- [ ] retries acotados;
-- [ ] reconciliación de jobs fallidos;
-- [ ] backups y recuperación;
-- [ ] métricas de crecimiento y egress.
+- [x] SENAPRED — comunicaciones oficiales y territorialización;
+- [x] DMC — Aviso / Alerta / Alarma meteorológica oficial;
+- [x] DIRECTEMAR — avisos meteorológicos marítimos;
+- [x] CONAF — incendios activos;
+- [x] CSN — sismos;
+- [x] SAESA — cortes vigentes y programados en su territorio;
+- [x] Aguas Décima — estado/cortes de agua en Valdivia con fallback conservador;
+- [x] RioenLinea — contexto regional, nunca alerta por sí solo;
+- [ ] SEC — capa nacional de clientes sin suministro: conector implementado y en gate de conectividad Vercel.
 
-**Gate:** el schema puede reconstruirse desde cero y una misma observación repetida no duplica evidencia.
+## Operacionales / 15 minutos
 
----
+- [x] DGA — señales fluviométricas;
+- [x] MOP Vialidad — emergencias;
+- [x] MOP infraestructura — emergencias;
+- [x] SINCA/MMA — calidad del aire;
+- [x] contexto municipal Valdivia como primera instancia del adaptador municipal reutilizable.
 
-# Fase 3 — Capa País real
+## Otras fuentes conectadas / disponibles
 
-Objetivo: hacer que ANTEMANO observe Chile usando fuentes oficiales verificables.
+- [x] CNE / Bencina en Línea;
+- [x] Coordinador Eléctrico — fuentes SIP ya modeladas;
+- [x] Banco Central;
+- [x] ChileCompra;
+- [x] SEA / SMA;
+- [x] ODEPA;
+- [x] DGA embalses / escasez donde el contrato es estable;
+- [x] SHOA CITSU como evidencia costera complementaria;
+- [x] CONAF forecast / Botón Rojo como fuentes diferenciadas cuando corresponde.
 
-Orden inicial:
-
-1. LeyChile — corregir contrato actual;
-2. Observatorio Logístico — tipar señales operacionales reales;
-3. DMC — activar credenciales y forecasts;
-4. Banco Central — activar series oficiales;
-5. DGA — habilitar sólo cuando exista canal programático estable;
-6. Coordinador Eléctrico / CNE según caso de uso.
-
-Para cada fuente:
-
-- [ ] contrato documentado;
-- [ ] schema validation;
-- [ ] provenance;
-- [ ] timestamps fuente/publicación/ingesta;
-- [ ] freshness;
-- [ ] health;
-- [ ] deduplicación;
-- [ ] observaciones persistidas;
-- [ ] tests de cambio de schema;
-- [ ] alertamiento de degradación.
-
-**Gate:** al menos una fuente oficial produce observaciones persistidas y trazables de forma recurrente.
+**Regla:** una fuente sólo se declara LIVE después de probar su contrato desde el runtime de producción.
 
 ---
 
-# Fase 4 — Grafo operacional real
+# 3. Arquitectura territorial — OPERATIVA
 
-Objetivo: conectar una organización autorizada y representar sus dependencias relevantes.
+- [x] geografía canónica por observación;
+- [x] relevancia por comuna, región y proximidad;
+- [x] cobertura declarada por fuente: nacional o territorial;
+- [x] cobertura desconocida de un proveedor permanece `unknown`, no se adivina;
+- [x] adaptador municipal WordPress reutilizable;
+- [x] adaptador RSS regional reutilizable;
+- [x] Valdivia queda como configuración, no como parser;
+- [x] RioenLinea / Los Ríos queda como configuración, no como motor regional fijo;
+- [ ] eliminar los últimos textos/UI que todavía asumen Los Ríos cuando debieran derivarse del perfil;
+- [ ] incorporar nuevas instancias territoriales sólo cuando aporten cobertura real a usuarios.
 
-- [ ] organizations;
-- [ ] operational nodes;
-- [ ] operational edges;
-- [ ] source bindings;
-- [ ] geografía;
-- [ ] temporalidad de relaciones;
-- [ ] provenance de cada relación;
-- [ ] importadores/adaptadores para sistemas existentes;
-- [ ] integridad tenant-aware;
-- [ ] revisión humana de relaciones críticas.
-
-**Gate:** cada nodo afectado por una señal puede explicar por qué está relacionado y a qué organización pertenece.
+**Gate:** cambiar de comuna/región no requiere reescribir el motor de ingestión.
 
 ---
 
-# Fase 5 — Primer ciclo anticipatorio real
+# 4. Alertas personales — OPERATIVAS, SIGUIENTE FOCO DE CALIDAD
 
-Objetivo: cerrar el camino completo con datos reales:
+Actualmente se proyectan señales personales desde fuentes oficiales y de servicio sin mezclar noticias con alertas.
+
+- [x] SENAPRED;
+- [x] DMC;
+- [x] DIRECTEMAR;
+- [x] SAESA;
+- [x] Aguas Décima;
+- [x] CONAF;
+- [x] DGA;
+- [x] MOP;
+- [x] SINCA;
+- [x] CSN;
+- [x] SERNAGEOMIN cuando corresponde;
+- [x] resolución automática cuando una condición deja de estar vigente;
+- [x] consolidación para evitar duplicados dentro de familias existentes;
+- [ ] consolidación supervisor → distribuidora para electricidad nacional (SEC + SAESA/CGE/etc.);
+- [ ] matriz sanitaria por territorio y adaptadores por empresa;
+- [ ] revisar thresholds y ventanas con replay histórico, no por intuición.
+
+**Regla:** evidencia más específica gana. Un agregado regulatorio no debe sumar dos veces clientes ya descritos por una distribuidora.
+
+---
+
+# 5. Próximo incremento — COBERTURA NACIONAL ÚTIL
+
+Orden actual:
+
+1. cerrar gate SEC desde Vercel;
+2. si SEC responde, activar health y alertas comunales sólo donde no exista evidencia más específica de distribuidora;
+3. construir matriz territorial de empresas sanitarias y eléctricas para seleccionar proveedor por perfil;
+4. reemplazar hardcodes visuales de Valdivia/Los Ríos por etiquetas derivadas del perfil;
+5. ampliar contexto municipal/regional usando los adaptadores genéricos ya creados;
+6. evaluar tránsito/servicios locales sólo con contratos oficiales o proveedores verificables.
+
+No sumar datasets nacionales sólo por aumentar el contador de fuentes.
+
+---
+
+# 6. Primer ciclo anticipatorio real — SIGUIENTE SALTO DE PRODUCTO
+
+La Capa País ya entrega observaciones y alertas. El salto siguiente es pasar de “qué ocurre” a “qué puede afectarme y cuándo”.
 
 ```text
-FUENTE → OBSERVACIÓN → MATCH → PROPAGACIÓN → CANDIDATO → EVENTO
+FUENTE → OBSERVACIÓN → CORRELACIÓN → CANDIDATO → EVENTO → DECISIÓN → OUTCOME
 ```
 
-Primeras familias recomendadas:
+Prioridades:
 
-1. `supplier_delay`;
-2. `stockout_risk`;
-3. `delivery_failure_risk`;
-4. `resource_constraint`;
-5. `asset_failure_risk` cuando exista telemetría suficiente.
+- [ ] correlacionar señales meteorológicas + cortes + incendios + infraestructura sin confundir correlación con causalidad;
+- [ ] event lifecycle persistido;
+- [ ] ventana de impacto basada en evidencia;
+- [ ] evidence trace reconstruible;
+- [ ] versionado de reglas;
+- [ ] revisión de falsos positivos y negativos;
+- [ ] replay temporal y baseline simple.
 
-- [ ] detector/baseline;
-- [ ] candidate generation;
-- [ ] correlación;
-- [ ] event lifecycle;
-- [ ] evidence trace;
-- [ ] predicted impact window;
-- [ ] false-positive review;
-- [ ] versionado de reglas/modelos.
-
-**Gate:** ANTEMANO genera un evento trazable a datos reales sin introducir información ficticia.
+**Gate:** ANTEMANO produce un evento anticipatorio que puede reconstruirse completamente desde evidencia real.
 
 ---
 
-# Fase 6 — Command Center
+# 7. Command Center — EN DESARROLLO
 
-Objetivo: hacer que la interfaz priorice decisiones, no fuentes ni gráficos.
+`Ahora` debe responder en menos de diez segundos:
 
-## Ahora
+1. qué requiere atención;
+2. dónde;
+3. cuándo puede impactar;
+4. qué evidencia lo sostiene;
+5. qué cambió desde la última revisión.
 
+Pendiente:
+
+- [ ] priorización por impacto/urgencia sin scores inventados;
+- [ ] evolución temporal del evento;
 - [ ] decisiones requeridas;
-- [ ] eventos accionables;
-- [ ] eventos evolucionando;
-- [ ] time-to-impact;
-- [ ] nodo/operación afectada;
-- [ ] evidencia mínima;
-- [ ] responsable y estado.
+- [ ] responsable/estado cuando exista contexto organizacional;
+- [ ] vista de evento con evidencia y dependencias;
+- [ ] separar claramente alerta oficial, afectación de servicio, contexto y anticipación.
 
-## Evento
-
-- [ ] predicción;
-- [ ] ventana de impacto;
-- [ ] evidencia;
-- [ ] dependencias;
-- [ ] historial;
-- [ ] cambios de confianza;
-- [ ] decisión requerida.
-
-## Fuentes
-
-Permanece como superficie operacional secundaria para salud, freshness, errores y provenance.
-
-**Gate:** un ejecutivo comprende qué requiere atención y por qué en menos de diez segundos.
+`Fuentes` permanece como superficie operacional secundaria para health, freshness, cobertura y provenance.
 
 ---
 
-# Fase 7 — Impact Engine
+# 8. Grafo operacional e Impact Engine — DESPUÉS DEL CONSUMIDOR PERSONAL
 
-Objetivo: explicar por qué el evento importa.
-
+- [ ] organizaciones y nodos operacionales autorizados;
+- [ ] relaciones y dependencias con provenance;
+- [ ] source bindings;
 - [ ] affected nodes;
 - [ ] dependency paths;
-- [ ] magnitud operacional;
-- [ ] exposición por producto/proceso/cliente cuando exista evidencia;
-- [ ] rangos de impacto;
-- [ ] moneda, fuente y timestamp para cifras financieras;
-- [ ] recomputación versionada;
-- [ ] explicación reconstruible.
+- [ ] magnitud operacional sólo cuando exista evidencia;
+- [ ] exposición económica con moneda, fuente y timestamp;
+- [ ] revisión humana de relaciones críticas.
 
-**Gate:** ningún impacto se presenta sin fuente y ruta de dependencia verificables.
+**Gate:** todo impacto explica por qué una señal afecta a un nodo concreto.
 
 ---
 
-# Fase 8 — Decision Loop
-
-Objetivo: transformar anticipación en acción controlada.
-
-- [ ] escenario de no acción;
-- [ ] alternativas;
-- [ ] restricciones;
-- [ ] supuestos;
-- [ ] recomendación versionada;
-- [ ] aprobación/rechazo humano;
-- [ ] asignación;
-- [ ] auditoría;
-- [ ] outcome capture;
-- [ ] reconciliation.
-
-**Gate:** ANTEMANO puede responder qué predijo, qué recomendó, qué se decidió y qué terminó ocurriendo.
-
----
-
-# Fase 9 — Memory y evaluación continua
-
-Objetivo: medir si ANTEMANO realmente aprende y genera tiempo útil.
+# 9. Decision Loop y evaluación continua
 
 North Stars:
 
-1. **Actionable Lead Time**
-2. **Event Precision**
-3. **Actionability Rate**
-4. **Decision Within Useful Window**
-5. **Estimated vs Observed Impact**
+1. **Actionable Lead Time**;
+2. **Event Precision**;
+3. **Actionability Rate**;
+4. **Decision Within Useful Window**;
+5. **Estimated vs Observed Impact**.
 
-Métricas de soporte:
+Pendiente:
 
-- source freshness;
-- ingestion lag;
-- false-positive rate;
-- dismissed-event rate;
-- outcome reconciliation coverage;
-- performance por detector/model version.
-
-- [ ] replay temporal;
+- [ ] escenario de no acción;
+- [ ] alternativas y restricciones;
+- [ ] decisión humana auditable;
+- [ ] outcome capture;
+- [ ] reconciliation;
 - [ ] backtesting sin leakage;
-- [ ] baseline comparison;
-- [ ] drift;
-- [ ] revisión de falsos positivos y negativos;
-- [ ] evaluación por organización y familia de evento.
-
-**Gate:** cada motor puede compararse contra una línea base y contra outcomes reales.
+- [ ] drift y performance por versión de regla/modelo.
 
 ---
 
-# Fase 10 — Integración enterprise
+# Reglas no negociables
 
-Objetivo: ampliar cobertura sin degradar seguridad ni trazabilidad.
-
-- [ ] SAP / ERP;
-- [ ] WMS / TMS;
-- [ ] MES / SCADA mediante límites read-only adecuados;
-- [ ] CMMS / mantenimiento;
-- [ ] CRM / ventas;
-- [ ] IoT / telemetría;
-- [ ] SSO;
-- [ ] controles de residencia y retención;
-- [ ] private networking cuando sea requerido;
-- [ ] SLA/SLO;
-- [ ] observabilidad y alertamiento operacional.
-
-La expansión se realiza por capacidad y valor operacional, no por una ventana comercial fija.
-
----
-
-# Reglas que no se negocian
-
-- no datos ficticios en producto;
+- no datos ficticios;
 - no “modo demo”;
-- no alertas sin evidencia;
-- no cifras económicas sin fuente;
-- no mezcla entre tenants;
+- no alerta sin evidencia;
+- no noticia regional elevada automáticamente a alerta oficial;
+- no distancia inventada cuando la fuente no entrega coordenadas;
+- no doble conteo entre regulador y proveedor;
+- no cifra económica sin fuente y timestamp;
+- no hardcode territorial en el motor;
+- no ocultar degradación de fuentes;
 - no LLM como forecaster cuantitativo por defecto;
-- no automatización crítica antes de demostrar seguridad y calidad;
-- no infraestructura especializada sin necesidad medida;
-- no esconder degradación de fuentes;
-- no convertir ANTEMANO en BI.
-
----
-
-# Próximo incremento
-
-**Incremento — Real Data Foundation**
-
-1. cerrar auth/API boundaries;
-2. endurecer tenancy en Postgres;
-3. normalizar CI y lockfile;
-4. corregir LeyChile;
-5. activar una fuente oficial con persistencia real;
-6. conectar el primer grafo operacional autorizado;
-7. producir el primer Event Candidate persistido basado únicamente en evidencia real;
-8. llevar `Ahora` desde monitor de fuentes a Command Center de eventos.
+- no convertir ANTEMANO en BI;
+- producción manda sobre el roadmap: este archivo debe actualizarse cuando el estado real cambie.
