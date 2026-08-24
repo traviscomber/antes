@@ -11,7 +11,11 @@ export async function GET() {
 
   results.sec = await probeSec();
   results.senapred = await probeText("https://t.me/s/SenapredChile");
-  results.aguasDecima = await probeText("https://www.aguasdecima.cl/emergencias/cortes-en-proceso");
+  results.aguasDecimaCurrent = await probeText("https://www.aguasdecima.cl/emergencias/cortes-en-proceso");
+  results.aguasDecimaScheduled = await probeText("https://www.aguasdecima.cl/emergencias/cortes-programados");
+  results.aguasDecimaEmergency = await probeText("https://www.aguasdecima.cl/emergencias/cortes-de-emergencia");
+  results.saesaScheduled = await probeText("https://www.gruposaesa.cl/saesa/desconexiones-programadas/");
+  results.saesaMap = await probeText("https://desconexiones.gruposaesa.cl/mapa?empresa=S");
   results.rioenlineaFeed = await probeText("https://www.rioenlinea.cl/feed/");
   results.diarioValdiviaFeed = await probeText("https://diariodevaldivia.cl/feed/");
   results.diarioSostenibleFeed = await probeText("https://www.diariosostenible.cl/feed/");
@@ -70,7 +74,8 @@ async function probeText(url: string) {
       length: text.length,
       hasItem: /<item\b/i.test(text),
       hasEntry: /<entry\b/i.test(text),
-      sample: text.slice(0, 500).replace(/\s+/g, " "),
+      scriptSrcs: Array.from(text.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)).slice(0, 12).map((match) => match[1]),
+      sample: text.slice(0, 1200).replace(/\s+/g, " "),
     };
   } catch (error) {
     return { error: error instanceof Error ? error.message : String(error) };
