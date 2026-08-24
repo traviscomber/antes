@@ -1,10 +1,12 @@
 import { aguasDecimaSource } from "./connectors/aguas-decima";
+import { dmcOfficialAlertsSource } from "./connectors/dmc-official-alerts";
 import { chileSignalSources as baseChileSignalSources } from "./registry-base";
 import type { CountrySignalSource } from "./types";
 
 export const chileSignalSources = [
   ...baseChileSignalSources,
   aguasDecimaSource,
+  dmcOfficialAlertsSource,
 ] as const satisfies readonly CountrySignalSource[];
 
 export function getCountrySignalSource(sourceId: string): CountrySignalSource | undefined {

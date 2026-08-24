@@ -16,6 +16,7 @@ import { probeConafForecastHealth } from "./connectors/conaf";
 import { CsnEarthquakeConnector } from "./connectors/csn";
 import { DgaScarcityDecreeConnector } from "./connectors/dga-scarcity";
 import { DgaVipNetReservoirConnector } from "./connectors/dga-vipnet";
+import { DmcOfficialAlertsConnector } from "./connectors/dmc-official-alerts";
 import { DmcWrfConnector } from "./connectors/dmc";
 import { LeyChileConnector } from "./connectors/leychile";
 import {
@@ -43,6 +44,7 @@ import type { SourceHealth } from "./types";
 export async function getChileSignalHealth(): Promise<SourceHealth[]> {
   const connectors = [
     new DmcWrfConnector(),
+    new DmcOfficialAlertsConnector(),
     new SincaAirQualityConnector(),
     new ObservatorioLogisticoConnector(),
     new LeyChileConnector(),
