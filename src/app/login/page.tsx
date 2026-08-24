@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth/session";
+import styles from "./login.module.css";
 
 const ERROR_MESSAGES: Record<string, string> = {
   invalid: "Credenciales incorrectas.",
@@ -23,17 +24,17 @@ export default async function LoginPage({
   const message = params.error ? ERROR_MESSAGES[params.error] : undefined;
 
   return (
-    <main className="loginShell">
-      <section className="loginPanel" aria-labelledby="login-title">
+    <main className={styles.shell}>
+      <section className={styles.panel} aria-labelledby="login-title">
         <div>
           <p className="eyebrow">N3URALIA / ANTEMANO</p>
           <h1 id="login-title">Acceso</h1>
-          <p className="loginCopy">
+          <p className={styles.copy}>
             Inteligencia anticipatoria para operaciones críticas.
           </p>
         </div>
 
-        <form className="loginForm" action="/api/auth/login" method="post">
+        <form className={styles.form} action="/api/auth/login" method="post">
           <label>
             <span>Correo</span>
             <input
@@ -57,7 +58,7 @@ export default async function LoginPage({
           </label>
 
           {message ? (
-            <p className="loginError" role="alert">
+            <p className={styles.error} role="alert">
               {message}
             </p>
           ) : null}
