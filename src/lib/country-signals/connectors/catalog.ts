@@ -11,6 +11,7 @@ import { ConafWildfireForecastConnector } from "./conaf";
 import { CsnEarthquakeConnector } from "./csn";
 import { DgaScarcityDecreeConnector } from "./dga-scarcity";
 import { DgaVipNetReservoirConnector } from "./dga-vipnet";
+import { DmcOfficialAlertsConnector } from "./dmc-official-alerts";
 import { DmcWrfConnector } from "./dmc";
 import { LeyChileConnector } from "./leychile";
 import {
@@ -38,6 +39,8 @@ export function createCountrySignalConnector(
   switch (sourceId) {
     case "cl.dmc.wrf":
       return new DmcWrfConnector();
+    case "cl.dmc.official-alerts":
+      return new DmcOfficialAlertsConnector();
     case "cl.mma.sinca-air-quality":
       return new SincaAirQualityConnector();
     case "cl.mtt.observatorio-logistico":
