@@ -1,5 +1,9 @@
 import { BancoCentralConnector } from "./connectors/banco-central";
 import { createCenSipConnector, cenSipSourceIds } from "./connectors/cen-sip";
+import {
+  ChileCompraDailyTenderConnector,
+  probeChileCompraOcdsHealth,
+} from "./connectors/chilecompra";
 import { createCneFuelConnector, cneFuelSourceIds } from "./connectors/cne-fuels";
 import { CneGenerationConnector } from "./connectors/cne-generation";
 import {
@@ -41,6 +45,7 @@ export async function getChileSignalHealth(): Promise<SourceHealth[]> {
     ...cenSipSourceIds.map((sourceId) => createCenSipConnector(sourceId)),
     new BancoCentralConnector(),
     new OdepaWholesaleProduceConnector(),
+    new ChileCompraDailyTenderConnector(),
     ...cneFuelSourceIds.map((sourceId) => createCneFuelConnector(sourceId)),
     new CneGenerationConnector(),
   ];
@@ -51,6 +56,7 @@ export async function getChileSignalHealth(): Promise<SourceHealth[]> {
 
   activeChecks.set("cl.conaf.wildfire-forecast", probeConafForecastHealth());
   activeChecks.set("cl.conaf.boton-rojo", probeConafRedButtonStoryMapHealth());
+  activeChecks.set("cl.chilecompra.ocds", probeChileCompraOcdsHealth());
 
   return Promise.all(
     chileSignalSources.map(async (source) => {
