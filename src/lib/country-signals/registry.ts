@@ -222,6 +222,17 @@ export const chileSignalSources = [
     description: "FX, UF, CPI, rates, trade and macroeconomic context.",
   },
   {
+    id: "cl.odepa.wholesale-produce",
+    name: "ODEPA Precios y Volúmenes Mayoristas",
+    authority: "Oficina de Estudios y Políticas Agrarias",
+    domain: "economy",
+    authMode: "none",
+    cadence: "Business-daily; published from 08:00 local time",
+    priority: "P0",
+    canonicalUrl: "https://datos.odepa.gob.cl/dataset/precios-mayoristas-de-frutas-y-hortalizas",
+    description: "Official daily wholesale fruit and vegetable prices and market-arrival volumes by market, product, variety, quality, commercialization unit and origin.",
+  },
+  {
     id: "cl.cne.liquid-fuel-prices",
     name: "CNE Precio Combustibles Líquidos",
     authority: "Comisión Nacional de Energía",
