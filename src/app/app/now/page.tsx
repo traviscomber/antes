@@ -1,8 +1,18 @@
 import Link from "next/link";
 import { requireSession } from "@/lib/auth/session";
-import { getNowSnapshot, type NowSnapshot } from "@/lib/now/read-model";
+import { getNowSnapshot, type NowSignal, type NowSnapshot } from "@/lib/now/read-model";
 
 export const dynamic = "force-dynamic";
+
+const numberFormat = new Intl.NumberFormat("es-CL");
+const chileDateFormat = new Intl.DateTimeFormat("es-CL", {
+  timeZone: "America/Santiago",
+  day: "2-digit",
+  month: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
 
 export default async function NowPage() {
   const session = await requireSession();
@@ -25,35 +35,73 @@ export default async function NowPage() {
 
       <section className="heroPanel">
         <div>
-          <p className="eyebrow">ESTADO OPERACIONAL</p>
-          <h2>{headline(snapshot)}</h2>
-          <p className="lede">{operationalStatus(snapshot)}</p>
+          <p className="eyebrow">CAPA PAÍS / DATOS REALES</p>
+          <h2>{countryHeadline(snapshot)}</h2>
+          <p className="lede">{countryStatus(snapshot)}</p>
         </div>
 
-        <div className="heroMetrics" aria-label="Estado real de ANTEMANO">
+        <div className="heroMetrics" aria-label="Datos reales de la Capa País">
           <div>
-            <strong>{snapshot.activeEvents}</strong>
-            <span>eventos activos</span>
+            <strong>{snapshot.sourcesWithEvidence}</strong>
+            <span>fuentes con evidencia</span>
           </div>
           <div>
-            <strong>{snapshot.observations}</strong>
-            <span>observaciones persistidas</span>
+            <strong>{numberFormat.format(snapshot.observations)}</strong>
+            <span>observaciones reales</span>
           </div>
           <div>
-            <strong>{snapshot.graphNodes}</strong>
-            <span>nodos operacionales</span>
+            <strong>{snapshot.freshSources24h}</strong>
+            <span>fuentes &lt; 24 h</span>
           </div>
+        </div>
+      </section>
+
+      <section className="sectionBlock">
+        <div className="sectionHeading">
+          <div>
+            <p className="sectionLabel">CHILE AHORA</p>
+            <h3>Última señal por fuente</h3>
+          </div>
+          <p>Una observación real y trazable por cada fuente que ya tiene evidencia persistida. Sin datos de ejemplo.</p>
+        </div>
+
+        <div className="sourceGrid">
+          {snapshot.signals.map((signal) => (
+            <article className="sourceCard" key={signal.id}>
+              <div className="sourceCardTop">
+                <div>
+                  <p className="sourceAuthority">{signal.sourceName}</p>
+                  <h4>{signalLabel(signal.signalType)}</h4>
+                </div>
+                <span className={`statusBadge ${severityClass(signal.severity)}`}>
+                  {signal.severity ?? signal.qualityState}
+                </span>
+              </div>
+
+              <p className="sourceDescription">
+                {signal.value ?? "Observación oficial sin valor escalar"}
+              </p>
+
+              <dl className="sourceMeta">
+                <div><dt>Actualizado</dt><dd>{formatChileDate(signal.observedAt)}</dd></div>
+                <div><dt>Ubicación</dt><dd>{signalLocation(signal)}</dd></div>
+                <div><dt>Registros</dt><dd>{numberFormat.format(signal.sourceObservations)}</dd></div>
+              </dl>
+
+              <p className="sourceMessage">{signal.sourceId} · calidad {signal.qualityState}</p>
+            </article>
+          ))}
         </div>
       </section>
 
       <section className="decisionPanel">
         <div>
-          <p className="sectionLabel">PRIORIDAD</p>
-          <h3>{priorityTitle(snapshot)}</h3>
-          <p>{priorityDetail(snapshot)}</p>
+          <p className="sectionLabel">OPERACIÓN N3URALIA</p>
+          <h3>{operationalTitle(snapshot)}</h3>
+          <p>{operationalDetail(snapshot)}</p>
         </div>
         <span className={`statusBadge ${snapshot.escalatedEvents > 0 ? "unavailable" : snapshot.activeEvents > 0 ? "degraded" : "neutral"}`}>
-          {snapshot.escalatedEvents > 0 ? "REVISAR" : snapshot.activeEvents > 0 ? "OBSERVAR" : "SIN EVENTOS"}
+          {snapshot.escalatedEvents > 0 ? "REVISAR" : snapshot.activeEvents > 0 ? "OBSERVAR" : "SIN GRAFO"}
         </span>
       </section>
 
@@ -63,7 +111,7 @@ export default async function NowPage() {
             <p className="sectionLabel">EVENTOS</p>
             <h3>Eventos operacionales</h3>
           </div>
-          <p>Se muestran únicamente candidatos persistidos para {session.organizationName}. No se generan tarjetas de ejemplo.</p>
+          <p>Se elevan sólo cuando una señal real coincide con una dependencia real de {session.organizationName}.</p>
         </div>
 
         <div className="sourceGrid">
@@ -80,7 +128,7 @@ export default async function NowPage() {
               </div>
 
               <p className="sourceDescription">
-                Señal: {humanize(event.signalType)}. Observada {formatDate(event.observedAt)}.
+                Señal: {signalLabel(event.signalType)}. Observada {formatChileDate(event.observedAt)}.
               </p>
 
               <dl className="sourceMeta">
@@ -97,17 +145,15 @@ export default async function NowPage() {
             <article className="sourceCard">
               <div className="sourceCardTop">
                 <div>
-                  <p className="sourceAuthority">BASE DE DATOS</p>
-                  <h4>No hay eventos registrados</h4>
+                  <p className="sourceAuthority">GRAFO OPERACIONAL</p>
+                  <h4>0 eventos de negocio</h4>
                 </div>
                 <span className="statusBadge neutral">0</span>
               </div>
               <p className="sourceDescription">
-                ANTEMANO no tiene candidatos de evento activos para esta organización.
+                La Capa País sí tiene datos reales. Lo que falta es cargar las dependencias reales de N3uralia para decidir qué señales nos afectan.
               </p>
-              <p className="sourceMessage">
-                Este estado viene directamente de <code>event_candidates</code>.
-              </p>
+              <p className="sourceMessage"><Link href="/app/graph">Ver grafo operacional</Link></p>
             </article>
           )}
         </div>
@@ -116,58 +162,10 @@ export default async function NowPage() {
       <section className="sectionBlock">
         <div className="sectionHeading">
           <div>
-            <p className="sectionLabel">EVIDENCIA</p>
-            <h3>Señales persistidas</h3>
-          </div>
-          <p>Últimas observaciones oficiales almacenadas. La disponibilidad de un conector por sí sola no aparece aquí.</p>
-        </div>
-
-        <div className="sourceGrid">
-          {snapshot.signals.length > 0 ? snapshot.signals.map((signal) => (
-            <article className="sourceCard" key={signal.id}>
-              <div className="sourceCardTop">
-                <div>
-                  <p className="sourceAuthority">{signal.sourceName}</p>
-                  <h4>{humanize(signal.signalType)}</h4>
-                </div>
-                <span className="statusBadge neutral">{signal.qualityState}</span>
-              </div>
-              <p className="sourceDescription">
-                {signal.value ?? "Observación sin valor escalar"}
-              </p>
-              <dl className="sourceMeta">
-                <div><dt>Fecha</dt><dd>{formatDate(signal.observedAt)}</dd></div>
-                <div><dt>Región</dt><dd>{signal.region ?? "—"}</dd></div>
-                <div><dt>Comuna</dt><dd>{signal.commune ?? "—"}</dd></div>
-              </dl>
-            </article>
-          )) : (
-            <article className="sourceCard">
-              <div className="sourceCardTop">
-                <div>
-                  <p className="sourceAuthority">PERSISTENCIA</p>
-                  <h4>No hay señales almacenadas</h4>
-                </div>
-                <span className="statusBadge neutral">0</span>
-              </div>
-              <p className="sourceDescription">
-                Los conectores todavía no han escrito observaciones en esta base.
-              </p>
-              <p className="sourceMessage">
-                Ir a Fuentes para revisar conectividad e ingestiones.
-              </p>
-            </article>
-          )}
-        </div>
-      </section>
-
-      <section className="sectionBlock">
-        <div className="sectionHeading">
-          <div>
-            <p className="sectionLabel">OPERACIÓN</p>
+            <p className="sectionLabel">SISTEMA</p>
             <h3>Estado de datos</h3>
           </div>
-          <p>Conteos obtenidos en tiempo real desde el Postgres conectado a este deployment.</p>
+          <p>Conteos leídos en tiempo real desde el Postgres conectado a producción.</p>
         </div>
 
         <div className="sourceGrid">
@@ -184,62 +182,107 @@ export default async function NowPage() {
 
           <article className="sourceCard">
             <p className="sourceAuthority">INGESTA</p>
-            <h4>{snapshot.ingestionRuns} ejecuciones</h4>
+            <h4>{numberFormat.format(snapshot.ingestionRuns)} ejecuciones</h4>
             <dl className="sourceMeta">
-              <div><dt>OK</dt><dd>{snapshot.successfulIngestions}</dd></div>
-              <div><dt>Fallidas</dt><dd>{snapshot.failedIngestions}</dd></div>
-              <div><dt>Fuentes con evidencia</dt><dd>{snapshot.sourcesWithEvidence}</dd></div>
+              <div><dt>OK</dt><dd>{numberFormat.format(snapshot.successfulIngestions)}</dd></div>
+              <div><dt>Fallidas</dt><dd>{numberFormat.format(snapshot.failedIngestions)}</dd></div>
+              <div><dt>Fuentes</dt><dd>{snapshot.sourcesWithEvidence}</dd></div>
             </dl>
-            <p className="sourceMessage">Última ejecución: {formatDate(snapshot.latestIngestionAt)}</p>
+            <p className="sourceMessage">Última ingesta: {formatChileDate(snapshot.latestIngestionAt)}</p>
           </article>
         </div>
       </section>
 
       <footer className="footer">
-        <span>ÚLTIMA LECTURA {formatDate(snapshot.generatedAt)}</span>
+        <span>ÚLTIMA LECTURA {formatChileDate(snapshot.generatedAt)}</span>
         <span>ANTEMANO / LIVE DATA</span>
       </footer>
     </main>
   );
 }
 
-function headline(snapshot: NowSnapshot): string {
+function countryHeadline(snapshot: NowSnapshot): string {
+  if (snapshot.observations === 0) return "Todavía no hay evidencia persistida.";
+  return `${snapshot.sourcesWithEvidence} fuentes oficiales están entregando evidencia.`;
+}
+
+function countryStatus(snapshot: NowSnapshot): string {
+  if (snapshot.observations === 0) return "Los conectores aún no han escrito datos en esta base.";
+  const latest = formatChileDate(snapshot.latestSignalAt);
+  return `${numberFormat.format(snapshot.observations)} observaciones reales almacenadas. Última señal: ${latest}. ${snapshot.freshSources24h} fuentes tienen datos de las últimas 24 horas.`;
+}
+
+function operationalTitle(snapshot: NowSnapshot): string {
   if (snapshot.escalatedEvents > 0) return `${snapshot.escalatedEvents} ${snapshot.escalatedEvents === 1 ? "evento requiere" : "eventos requieren"} atención.`;
-  if (snapshot.activeEvents > 0) return `${snapshot.activeEvents} ${snapshot.activeEvents === 1 ? "evento activo" : "eventos activos"}.`;
-  return "No hay eventos operacionales activos.";
+  if (snapshot.activeEvents > 0) return `${snapshot.activeEvents} ${snapshot.activeEvents === 1 ? "evento operacional activo" : "eventos operacionales activos"}.`;
+  if (snapshot.graphNodes === 0) return "La Capa País está viva; el grafo de N3uralia está vacío.";
+  return "Sin eventos operacionales activos.";
 }
 
-function operationalStatus(snapshot: NowSnapshot): string {
-  if (snapshot.graphNodes === 0) {
-    return "La base está conectada, pero esta organización todavía no tiene un grafo operacional cargado. Sin dependencias reales, ANTEMANO no eleva señales a eventos.";
-  }
-  if (snapshot.observations === 0) {
-    return "El grafo operacional existe, pero todavía no hay observaciones oficiales persistidas para evaluar exposición.";
-  }
-  return `${snapshot.observations} observaciones persistidas se contrastan contra ${snapshot.graphNodes} nodos y ${snapshot.graphEdges} relaciones operacionales.`;
+function operationalDetail(snapshot: NowSnapshot): string {
+  if (snapshot.escalatedEvents > 0) return "Hay exposición persistida y escalada. Revisa su evidencia y ruta de dependencia.";
+  if (snapshot.activeEvents > 0) return "Hay señales oficiales que coinciden con dependencias configuradas en el grafo.";
+  if (snapshot.graphNodes === 0) return "No inventamos plantas, proveedores ni rutas. Hay que cargar dependencias reales antes de elevar las señales del país a eventos de negocio.";
+  return "El grafo existe, pero ninguna señal actual produce una exposición operacional persistida.";
 }
 
-function priorityTitle(snapshot: NowSnapshot): string {
-  if (snapshot.escalatedEvents > 0) return `${snapshot.escalatedEvents} ${snapshot.escalatedEvents === 1 ? "evento escalado" : "eventos escalados"}`;
-  if (snapshot.activeEvents > 0) return "Eventos activos sin escalamiento";
-  return "Sin eventos escalados";
+function signalLabel(value: string): string {
+  const labels: Record<string, string> = {
+    "fire.ignition_probability.forecast": "Probabilidad de ignición",
+    "fire.fuel_moisture.forecast": "Humedad de combustible",
+    "fire.wildfire.active": "Incendio activo",
+    "environment.air_quality.pm25": "Calidad del aire · MP2.5",
+    "environment.air_quality.pm10": "Calidad del aire · MP10",
+    "environment.air_quality.no2": "Calidad del aire · NO₂",
+    "environment.air_quality.so2": "Calidad del aire · SO₂",
+    "environment.air_quality.co": "Calidad del aire · CO",
+    "environment.air_quality.o3": "Calidad del aire · O₃",
+    "water.reservoir.volume.latest_window": "Volumen de embalse",
+    "water.river.flow_alert": "Alerta fluviométrica",
+    "water.scarcity.decree_active": "Escasez hídrica",
+    "logistics.road.emergency": "Emergencia vial",
+    "logistics.border_crossing.status": "Paso fronterizo",
+    "infrastructure.mop.emergency": "Emergencia de infraestructura",
+    "regulation.environmental.enforcement.active_case": "Procedimiento sancionatorio SMA",
+    "regulation.environmental.seia_project_submitted": "Proyecto ingresado al SEIA",
+    "economy.agriculture.wholesale_price.average": "Precio mayorista agrícola",
+    "economy.agriculture.wholesale_volume": "Volumen mayorista agrícola",
+    "energy.generation.monthly_mwh": "Generación eléctrica mensual",
+  };
+  return labels[value] ?? humanize(value);
 }
 
-function priorityDetail(snapshot: NowSnapshot): string {
-  if (snapshot.escalatedEvents > 0) return "Hay eventos persistidos en estado escalated. Revisa su evidencia y dependencias antes de decidir.";
-  if (snapshot.activeEvents > 0) return "Existen candidatos persistidos, pero ninguno está escalado en este momento.";
-  if (snapshot.graphNodes === 0) return "No hay decisiones que elevar porque el grafo operacional aún está vacío.";
-  if (snapshot.observations === 0) return "No hay decisiones que elevar porque todavía no existen observaciones persistidas.";
-  return "No existe ningún evento escalado para la organización en este momento.";
+function signalLocation(signal: NowSignal): string {
+  if (signal.commune && signal.region) return `${signal.commune} · ${shortRegion(signal.region)}`;
+  if (signal.commune) return signal.commune;
+  if (signal.region) return shortRegion(signal.region);
+  return "Chile";
+}
+
+function shortRegion(region: string): string {
+  return region
+    .replace(/^Región de la /i, "")
+    .replace(/^Región de los /i, "Los ")
+    .replace(/^Región de /i, "")
+    .replace(/^Región del /i, "")
+    .replace(/^Región Metropolitana de Santiago$/i, "Metropolitana")
+    .replace(/^Región Metropolitana$/i, "Metropolitana");
+}
+
+function severityClass(severity?: string): string {
+  if (severity === "critical" || severity === "high") return "unavailable";
+  if (severity === "warning") return "degraded";
+  if (severity === "info") return "healthy";
+  return "neutral";
 }
 
 function humanize(value: string): string {
   return value.replace(/[._-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function formatDate(value?: string): string {
+function formatChileDate(value?: string): string {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toISOString().replace("T", " ").slice(0, 16) + "Z";
+  return chileDateFormat.format(date).replace(",", "");
 }
