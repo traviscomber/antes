@@ -26,6 +26,10 @@ import {
 import { ObservatorioLogisticoConnector } from "./connectors/observatorio-logistico";
 import { OdepaWholesaleProduceConnector } from "./connectors/odepa-wholesale";
 import { SincaAirQualityConnector } from "./connectors/sinca";
+import {
+  SeaSeiaProjectConnector,
+  SmaSnifaSanctioningConnector,
+} from "./connectors/sma-sea";
 import { chileSignalSources } from "./registry";
 import type { SourceHealth } from "./types";
 
@@ -45,6 +49,8 @@ export async function getChileSignalHealth(): Promise<SourceHealth[]> {
     ...cenSipSourceIds.map((sourceId) => createCenSipConnector(sourceId)),
     new BancoCentralConnector(),
     new OdepaWholesaleProduceConnector(),
+    new SmaSnifaSanctioningConnector(),
+    new SeaSeiaProjectConnector(),
     new ChileCompraDailyTenderConnector(),
     ...cneFuelSourceIds.map((sourceId) => createCneFuelConnector(sourceId)),
     new CneGenerationConnector(),
