@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -7,47 +8,97 @@ export const maxDuration = 60;
 const CONAF_PAGE = "https://www.conaf.cl/incendios/situacion-actual-y-pronostico-de-incendios/";
 const USER_AGENT = "N3uralia-ANTEMANO/0.1 (+https://www.antemano.app)";
 
+interface PublicReportDescriptor {
+  tenantId: string;
+  resourceKey: string;
+}
+
 export async function GET() {
   try {
     const page = await fetchText(CONAF_PAGE);
-    const reportUrls = [...new Set(
-      [...page.matchAll(/https:\/\/app\.powerbi\.com\/view\?r=[^\"'<\\s&]+/gi)].map((m) =>
-        m[0].replace(/&amp;/g, "&"),
-      ),
-    )].slice(0, 5);
-
+    const reportUrls = extractPowerBiUrls(page);
     const reports = await Promise.all(
-      reportUrls.map(async (url, index) => {
-        const html = await fetchText(url);
-        return {
-          index,
-          url,
-          bytes: html.length,
-          title: firstMatch(html, /<title>([^<]*)<\/title>/i),
-          datasetId: firstMatch(html, /(?:datasetId|datasetIdString)[\"'\\s:=]+([0-9a-f-]{36})/i),
-          reportId: firstMatch(html, /(?:reportId|reportIdString)[\"'\\s:=]+([0-9a-f-]{36})/i),
-          modelId: firstMatch(html, /(?:modelsId|modelId)[\"'\\s:=]+([0-9]+)/i),
-          resolvedClusterUrl: firstMatch(
-            html,
-            /(https:\/\/[^\"'<>\\s]+\.analysis\.windows\.net\/?)/i,
-          ),
-          requestId: firstMatch(html, /(?:requestId)[\"'\\s:=]+([0-9a-f-]{36})/i),
-          activityId: firstMatch(html, /(?:activityId)[\"'\\s:=]+([0-9a-f-]{36})/i),
-          resourceKey: firstMatch(
-            html,
-            /(?:resourceKey|resolvedResourceKey)[\"'\\s:=]+([0-9a-f-]{36})/i,
-          ),
-          configSnippets: extractSnippets(html),
-        };
-      }),
+      reportUrls.map(async (url, index) => inspectReport(url, index, page)),
     );
 
-    return NextResponse.json({ generatedAt: new Date().toISOString(), reportUrls, reports });
+    return NextResponse.json({ generatedAt: new Date().toISOString(), reports });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "CONAF Power BI probe failed." },
       { status: 502 },
     );
+  }
+}
+
+async function inspectReport(url: string, index: number, conafHtml: string) {
+  const descriptor = decodeDescriptor(url);
+  const html = await fetchText(url);
+  const clusterUri = firstMatch(html, /var\s+clusterUri\s*=\s*['\"]([^'\"]+)['\"]/i);
+  const telemetrySessionId = firstMatch(
+    html,
+    /var\s+telemetrySessionId\s*=\s*['\"]([^'\"]+)['\"]/i,
+  );
+  const context = pageContext(conafHtml, url);
+
+  let routing: unknown;
+  let models: unknown;
+  let conceptualSchema: unknown;
+  if (descriptor && clusterUri) {
+    const activityId = telemetrySessionId || randomUUID();
+    const routeRequestId = randomUUID();
+    const routingUrl = `${getApimUrl(clusterUri)}/public/routing/cluster/${descriptor.tenantId}`;
+    routing = await fetchJson(routingUrl, descriptor.resourceKey, activityId, routeRequestId);
+    const fixedCluster = readString(routing, "FixedClusterUri");
+    if (fixedCluster) {
+      const apim = getApimUrl(fixedCluster);
+      [models, conceptualSchema] = await Promise.all([
+        fetchJson(
+          `${apim}/public/reports/${descriptor.resourceKey}/modelsAndExploration?preferReadOnlySession=true`,
+          descriptor.resourceKey,
+          activityId,
+          randomUUID(),
+        ),
+        fetchJson(
+          `${apim}/public/reports/${descriptor.resourceKey}/conceptualschema`,
+          descriptor.resourceKey,
+          activityId,
+          randomUUID(),
+        ),
+      ]);
+    }
+  }
+
+  return {
+    index,
+    context,
+    descriptor,
+    bytes: html.length,
+    clusterUri,
+    routing: summarizeRouting(routing),
+    models: summarizeModels(models),
+    conceptualSchema: summarizeSchema(conceptualSchema),
+  };
+}
+
+function extractPowerBiUrls(html: string): string[] {
+  const decoded = html.replace(/&#038;|&amp;/g, "&");
+  const matches = [...decoded.matchAll(/https:\/\/app\.powerbi\.com\/view\?r=[A-Za-z0-9_=-]+/gi)];
+  return [...new Set(matches.map((m) => m[0]))].slice(0, 6);
+}
+
+function decodeDescriptor(url: string): PublicReportDescriptor | undefined {
+  const encoded = new URL(url).searchParams.get("r");
+  if (!encoded) return undefined;
+  try {
+    const padded = encoded.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(encoded.length / 4) * 4, "=");
+    const payload = JSON.parse(Buffer.from(padded, "base64").toString("utf8")) as {
+      t?: unknown;
+      k?: unknown;
+    };
+    if (typeof payload.t !== "string" || typeof payload.k !== "string") return undefined;
+    return { tenantId: payload.t, resourceKey: payload.k };
+  } catch {
+    return undefined;
   }
 }
 
@@ -62,32 +113,100 @@ async function fetchText(url: string): Promise<string> {
   return response.text();
 }
 
+async function fetchJson(
+  url: string,
+  resourceKey: string,
+  activityId: string,
+  requestId: string,
+): Promise<unknown> {
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/json",
+      ActivityId: activityId,
+      RequestId: requestId,
+      "X-PowerBI-ResourceKey": resourceKey,
+      "User-Agent": USER_AGENT,
+    },
+    cache: "no-store",
+    signal: AbortSignal.timeout(20_000),
+  });
+  const text = await response.text();
+  if (!response.ok) return { httpStatus: response.status, body: text.slice(0, 500) };
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return { httpStatus: response.status, body: text.slice(0, 500) };
+  }
+}
+
+function getApimUrl(clusterUri: string): string {
+  const url = new URL(clusterUri);
+  const host = url.hostname.replace(/-redirect(?=\.analysis\.windows\.net$)/i, "");
+  return `${url.protocol}//${host}`.replace(/\/$/, "");
+}
+
+function pageContext(html: string, url: string): string {
+  const decoded = html.replace(/&#038;|&amp;/g, "&");
+  const idx = decoded.indexOf(url);
+  if (idx < 0) return "";
+  return decoded
+    .slice(Math.max(0, idx - 450), Math.min(decoded.length, idx + url.length + 220))
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function summarizeRouting(value: unknown) {
+  if (!isObject(value)) return value;
+  return {
+    fixedClusterUri: readString(value, "FixedClusterUri"),
+    httpStatus: value.httpStatus,
+    body: value.body,
+  };
+}
+
+function summarizeModels(value: unknown) {
+  if (!isObject(value)) return value;
+  const models = Array.isArray(value.models) ? value.models : Array.isArray(value.Models) ? value.Models : [];
+  return {
+    httpStatus: value.httpStatus,
+    body: value.body,
+    keys: Object.keys(value).slice(0, 30),
+    models: models.slice(0, 5).map((model) => {
+      if (!isObject(model)) return model;
+      return {
+        id: model.id ?? model.Id,
+        name: model.name ?? model.Name,
+        dbName: model.dbName ?? model.DbName,
+      };
+    }),
+    explorationKeys: isObject(value.exploration) ? Object.keys(value.exploration).slice(0, 30) : undefined,
+  };
+}
+
+function summarizeSchema(value: unknown) {
+  if (!isObject(value)) return value;
+  const schemas = Object.values(value).filter(isObject);
+  const text = JSON.stringify(value);
+  const names = [...text.matchAll(/\"(?:Name|name)\":\"([^\"]+)\"/g)].map((m) => m[1]);
+  return {
+    httpStatus: value.httpStatus,
+    body: value.body,
+    keys: Object.keys(value).slice(0, 30),
+    objectCount: schemas.length,
+    names: [...new Set(names)].slice(0, 160),
+    bytes: text.length,
+  };
+}
+
 function firstMatch(html: string, pattern: RegExp): string | undefined {
   return html.match(pattern)?.[1];
 }
 
-function extractSnippets(html: string): string[] {
-  const needles = [
-    "resolvedCluster",
-    "resourceKey",
-    "datasetId",
-    "reportId",
-    "modelsId",
-    "activityId",
-    "requestId",
-    "modelsAndExploration",
-    "querydata",
-  ];
-  const snippets: string[] = [];
-  for (const needle of needles) {
-    const lower = html.toLowerCase();
-    let from = 0;
-    while (snippets.length < 30) {
-      const index = lower.indexOf(needle.toLowerCase(), from);
-      if (index < 0) break;
-      snippets.push(html.slice(Math.max(0, index - 180), Math.min(html.length, index + 420)));
-      from = index + needle.length;
-    }
-  }
-  return [...new Set(snippets)].slice(0, 30);
+function readString(value: unknown, key: string): string | undefined {
+  return isObject(value) && typeof value[key] === "string" ? (value[key] as string) : undefined;
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
