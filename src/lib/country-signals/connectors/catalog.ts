@@ -1,6 +1,7 @@
 import type { CountrySignalConnector } from "../types";
 import { BancoCentralConnector } from "./banco-central";
 import { CneGenerationConnector } from "./cne-generation";
+import { ConafWildfireForecastConnector } from "./conaf";
 import { DmcWrfConnector } from "./dmc";
 import { LeyChileConnector } from "./leychile";
 import {
@@ -31,6 +32,8 @@ export function createCountrySignalConnector(
       return new BorderCrossingsConnector();
     case "cl.mop.emergencias-infraestructura":
       return new MopAllInfrastructureEmergenciesConnector();
+    case "cl.conaf.wildfire-forecast":
+      return new ConafWildfireForecastConnector();
     case "cl.bcch.bde":
       return new BancoCentralConnector();
     case "cl.cne.generacion-bruta":
