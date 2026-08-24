@@ -3,9 +3,11 @@ import { getSession, isAdmin } from "@/lib/auth/session";
 import { createCountrySignalConnector } from "@/lib/country-signals/connectors/catalog";
 import { runCountrySignalIngestion } from "@/lib/country-signals/ingestion";
 import { createNeonCountrySignalStore } from "@/lib/country-signals/neon-store";
+import { refreshPersonalAlertsForAllUsers } from "@/lib/profile/personal-alerts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   const browserForm = isBrowserForm(request);
@@ -38,6 +40,15 @@ export async function POST(request: NextRequest) {
       createNeonCountrySignalStore(),
     );
 
+    let personalAlerts: Awaited<ReturnType<typeof refreshPersonalAlertsForAllUsers>> | undefined;
+    try {
+      personalAlerts = await refreshPersonalAlertsForAllUsers({ sourceId: result.sourceId });
+    } catch (error) {
+      // Canonical ingestion must remain successful even if a derived user alert
+      // projection fails. A later ingestion/profile save retries the projection.
+      console.error(`Personal alert refresh failed after ${result.sourceId} ingestion`, error);
+    }
+
     if (browserForm) {
       const url = new URL("/app/sources", request.url);
       url.searchParams.set("source", result.sourceId);
@@ -47,7 +58,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.redirect(url, 303);
     }
 
-    return NextResponse.json({ ok: true, ...result });
+    return NextResponse.json({ ok: true, ...result, personalAlerts });
   } catch (error) {
     const message = sanitizePublicError(error);
     const status = /not configured|required/i.test(message) ? 409 : 502;
