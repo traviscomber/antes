@@ -2,7 +2,7 @@ type JsonObject = Record<string, unknown>;
 
 const DEFAULT_PORTAL_URL = "https://www.arcgis.com";
 const ITEM_ID_RE = /^[0-9a-f]{32}$/i;
-const SERVICE_URL_RE = /^https?:\/\/[^\s"']+\/rest\/services\/[^\s"']+\/(?:FeatureServer|MapServer)(?:\/\d+)?(?:\?.*)?$/i;
+const SERVICE_URL_RE = /^https?:\/\/[^\s"']+\/rest\/services\/[^\s"']+\/(?:FeatureServer|MapServer)(?:\/\d+)?\/?(?:\?.*)?$/i;
 const USER_AGENT = "N3uralia-ANTEMANO/0.1 (+https://www.antemano.app)";
 
 export interface ArcGisPortalItemSummary {

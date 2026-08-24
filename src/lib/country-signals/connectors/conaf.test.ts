@@ -43,10 +43,10 @@ describe("CONAF wildfire forecast normalization", () => {
     });
     expect(observation?.geography).toMatchObject({
       country: "CL",
-      longitude: -71.99,
-      latitude: -37.99,
       geometry: { type: "Polygon" },
     });
+    expect(observation?.geography?.longitude).toBeCloseTo(-71.99, 10);
+    expect(observation?.geography?.latitude).toBeCloseTo(-37.99, 10);
   });
 
   it("rejects PI below the official 70 percent selection threshold", () => {
@@ -80,8 +80,8 @@ describe("CONAF wildfire forecast normalization", () => {
       validFrom: "2026-08-24T00:00:00.000Z",
       validUntil: "2026-08-25T00:00:00.000Z",
       geography: { country: "CL" },
-      severity: undefined,
     });
+    expect(observation.severity).toBeUndefined();
     expect(observation.normalizedPayload).toMatchObject({
       totalCells: 4456,
       cellsAtOrBelow6: 1769,
