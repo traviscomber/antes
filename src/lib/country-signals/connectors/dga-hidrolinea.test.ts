@@ -38,6 +38,15 @@ describe("DGA Hidrolínea", () => {
     });
   });
 
+  it("preserves decimal-dot values if the upstream rendering format changes", () => {
+    const xml = `<partial-response><script>var ultimoCaudalReg = "656.78"; var dif24PptacionAcum = "1.25"; var ultimaPptacionAcumuladaReg = "1820.30";</script></partial-response>`;
+    expect(parseHidrolineaDetail(xml)).toEqual({
+      flowM3s: 656.78,
+      precipitation24hMm: 1.25,
+      cumulativePrecipitationMm: 1820.3,
+    });
+  });
+
   it("keeps technical monitoring distinct across pre-threshold and official-plan thresholds", () => {
     expect(technicalFlowState(656.78)).toBe("green");
     expect(technicalFlowState(CALLE_CALLE_THRESHOLDS.yellow.flowM3s * 0.81)).toBe("watch");
