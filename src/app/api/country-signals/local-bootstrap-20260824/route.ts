@@ -37,7 +37,7 @@ export async function GET() {
   ) as { user_id: string; organization_id: string }[];
   const user = users[0];
   const snapshot = user ? await getNowSnapshot(user.organization_id, user.user_id) : undefined;
-  const sourceIds = new Set(connectors.map((connector) => connector.source.id));
+  const sourceIds = new Set<string>(connectors.map((connector) => connector.source.id));
   const sourceCounts = await sql.query(
     `select source_id, signal_type, count(*)::int as observations, max(last_seen_at) as last_seen_at
        from external_observations
