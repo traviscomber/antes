@@ -1,4 +1,4 @@
-import { aguasDecimaSource } from "./connectors/aguas-decima";
+import { aguasDecimaCurrentSource } from "./connectors/aguas-decima-current";
 import { dmcOfficialAlertsSource } from "./connectors/dmc-official-alerts";
 import { muniValdiviaSource } from "./connectors/munivaldivia";
 import { shoaCitsuSource } from "./connectors/shoa-citsu";
@@ -7,7 +7,7 @@ import type { CountrySignalSource } from "./types";
 
 export const chileSignalSources = [
   ...baseChileSignalSources,
-  aguasDecimaSource,
+  aguasDecimaCurrentSource,
   dmcOfficialAlertsSource,
   shoaCitsuSource,
   muniValdiviaSource,
