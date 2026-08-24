@@ -1,19 +1,21 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
+const canonicalUrl = "https://www.antemano.app";
+
 export const metadata: Metadata = {
-  metadataBase: new URL("https://antemano.app"),
+  metadataBase: new URL(canonicalUrl),
   title: "ANTEMANO — Inteligencia anticipatoria",
   description:
     "N3uralia ANTEMANO convierte señales tempranas en tiempo para actuar antes del impacto.",
   alternates: {
-    canonical: "https://antemano.app",
+    canonical: canonicalUrl,
   },
   openGraph: {
     title: "ANTEMANO — Inteligencia anticipatoria",
     description:
       "N3uralia ANTEMANO convierte señales tempranas en tiempo para actuar antes del impacto.",
-    url: "https://antemano.app",
+    url: canonicalUrl,
     siteName: "ANTEMANO",
     locale: "es_CL",
     type: "website",
