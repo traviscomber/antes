@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/probe-calle-calle.mjs && next build",
+    "build": "vitest run src/lib/country-signals/connectors/dga-hidrolinea.test.ts src/lib/hydrology/calle-calle.test.ts && next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
