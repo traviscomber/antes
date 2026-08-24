@@ -1,10 +1,21 @@
 import Link from "next/link";
 import { requireSession } from "@/lib/auth/session";
-import { getNowSnapshot, type NowSignal, type NowSnapshot } from "@/lib/now/read-model";
+import { fuelTypeLabel } from "@/lib/profile/user-profile";
+import {
+  getNowSnapshot,
+  type NowSignal,
+  type NowSnapshot,
+  type PersonalSignal,
+} from "@/lib/now/read-model";
 
 export const dynamic = "force-dynamic";
 
 const numberFormat = new Intl.NumberFormat("es-CL");
+const currencyFormat = new Intl.NumberFormat("es-CL", {
+  style: "currency",
+  currency: "CLP",
+  maximumFractionDigits: 0,
+});
 const chileDateFormat = new Intl.DateTimeFormat("es-CL", {
   timeZone: "America/Santiago",
   day: "2-digit",
@@ -16,7 +27,8 @@ const chileDateFormat = new Intl.DateTimeFormat("es-CL", {
 
 export default async function NowPage() {
   const session = await requireSession();
-  const snapshot = await getNowSnapshot(session.organizationId);
+  const snapshot = await getNowSnapshot(session.organizationId, session.userId);
+  const location = snapshot.profile?.homeCommune ?? snapshot.profile?.homeRegion;
 
   return (
     <main className="shell">
@@ -28,6 +40,7 @@ export default async function NowPage() {
         <div className="topbarMeta">
           <span>{session.organizationName}</span>
           <span>{session.role}</span>
+          <Link href="/app/profile">PERFIL</Link>
           <Link href="/app/graph">GRAFO</Link>
           <Link href="/app/sources">FUENTES</Link>
         </div>
@@ -35,23 +48,23 @@ export default async function NowPage() {
 
       <section className="heroPanel">
         <div>
-          <p className="eyebrow">CAPA PAÍS / DATOS REALES</p>
-          <h2>{countryHeadline(snapshot)}</h2>
-          <p className="lede">{countryStatus(snapshot)}</p>
+          <p className="eyebrow">{location ? `PARA TI / ${location.toUpperCase()}` : "PARA TI"}</p>
+          <h2>{personalHeadline(snapshot)}</h2>
+          <p className="lede">{personalStatus(snapshot)}</p>
         </div>
 
-        <div className="heroMetrics" aria-label="Datos reales de la Capa País">
+        <div className="heroMetrics" aria-label="Señales personalizadas">
+          <div>
+            <strong>{snapshot.personalAttentionCount}</strong>
+            <span>requieren atención</span>
+          </div>
+          <div>
+            <strong>{snapshot.personalSignals.length}</strong>
+            <span>señales relevantes</span>
+          </div>
           <div>
             <strong>{snapshot.sourcesWithEvidence}</strong>
-            <span>fuentes con evidencia</span>
-          </div>
-          <div>
-            <strong>{numberFormat.format(snapshot.observations)}</strong>
-            <span>observaciones reales</span>
-          </div>
-          <div>
-            <strong>{snapshot.freshSources24h}</strong>
-            <span>fuentes &lt; 24 h</span>
+            <span>fuentes oficiales</span>
           </div>
         </div>
       </section>
@@ -59,10 +72,82 @@ export default async function NowPage() {
       <section className="sectionBlock">
         <div className="sectionHeading">
           <div>
-            <p className="sectionLabel">CHILE AHORA</p>
-            <h3>Última señal por fuente</h3>
+            <p className="sectionLabel">PARA TI</p>
+            <h3>{location ? `Señales relevantes para ${location}` : "Configura tu ubicación"}</h3>
           </div>
-          <p>Una observación real y trazable por cada fuente que ya tiene evidencia persistida. Sin datos de ejemplo.</p>
+          <p>
+            {location
+              ? "Se ordenan por coincidencia de comuna, cercanía geográfica y región. La evidencia sigue siendo la observación oficial original."
+              : "Indica dónde vives para priorizar señales reales cercanas a ti."}
+          </p>
+        </div>
+
+        <div className="sourceGrid">
+          {snapshot.personalSignals.length > 0 ? snapshot.personalSignals.map((signal) => (
+            <article className="sourceCard personalSignalCard" key={`personal-${signal.id}`}>
+              <div className="sourceCardTop">
+                <div>
+                  <p className="sourceAuthority">{signal.sourceName}</p>
+                  <h4>{signalLabel(signal.signalType)}</h4>
+                </div>
+                <span className={`statusBadge ${signal.attention ? "unavailable" : severityClass(signal.severity)}`}>
+                  {signal.attention ? "ATENCIÓN" : signal.relevance.toUpperCase()}
+                </span>
+              </div>
+
+              <p className="sourceDescription">
+                {signal.value ?? "Observación oficial sin valor escalar"}
+                {signal.estimatedTankCostClp !== undefined
+                  ? ` · Llenar ${snapshot.profile?.tankCapacityLiters} L: ${currencyFormat.format(signal.estimatedTankCostClp)}`
+                  : ""}
+              </p>
+
+              <dl className="sourceMeta">
+                <div><dt>Actualizado</dt><dd>{formatChileDate(signal.observedAt)}</dd></div>
+                <div><dt>Ubicación</dt><dd>{signalLocation(signal)}</dd></div>
+                <div><dt>Relevancia</dt><dd>{personalReason(signal)}</dd></div>
+              </dl>
+
+              <p className="sourceMessage">
+                <span className="personalSignalReason">{personalReasonDetail(signal)}</span> · calidad {signal.qualityState}
+              </p>
+            </article>
+          )) : (
+            <article className="sourceCard personalSignalCard">
+              <div className="sourceCardTop">
+                <div>
+                  <p className="sourceAuthority">PERFIL PERSONAL</p>
+                  <h4>{location ? "Sin señales geográficas coincidentes" : "Falta tu ubicación"}</h4>
+                </div>
+                <span className="statusBadge neutral">PERFIL</span>
+              </div>
+              <p className="sourceDescription">
+                {location
+                  ? "No hay observaciones persistidas que coincidan actualmente con tu comuna, región o un radio de 80 km."
+                  : "Configura región y comuna para empezar a filtrar la Capa País."}
+              </p>
+              <p className="sourceMessage"><Link href="/app/profile">Editar perfil</Link></p>
+            </article>
+          )}
+        </div>
+      </section>
+
+      <section className="decisionPanel compactDecision">
+        <div>
+          <p className="sectionLabel">TU CONTEXTO</p>
+          <h3>{profileSummary(snapshot)}</h3>
+          <p>{profileDetail(snapshot)}</p>
+        </div>
+        <span className="statusBadge healthy"><Link href="/app/profile">EDITAR PERFIL</Link></span>
+      </section>
+
+      <section className="sectionBlock">
+        <div className="sectionHeading">
+          <div>
+            <p className="sectionLabel">CAPA PAÍS / DATOS REALES</p>
+            <h3>Chile ahora</h3>
+          </div>
+          <p>{countryStatus(snapshot)}</p>
         </div>
 
         <div className="sourceGrid">
@@ -151,7 +236,7 @@ export default async function NowPage() {
                 <span className="statusBadge neutral">0</span>
               </div>
               <p className="sourceDescription">
-                La Capa País sí tiene datos reales. Lo que falta es cargar las dependencias reales de N3uralia para decidir qué señales nos afectan.
+                Las alertas personales y el grafo empresarial son capas distintas. No inventamos plantas, proveedores ni dependencias para producir eventos de negocio.
               </p>
               <p className="sourceMessage"><Link href="/app/graph">Ver grafo operacional</Link></p>
             </article>
@@ -195,21 +280,54 @@ export default async function NowPage() {
 
       <footer className="footer">
         <span>ÚLTIMA LECTURA {formatChileDate(snapshot.generatedAt)}</span>
-        <span>ANTEMANO / LIVE DATA</span>
+        <span>ANTEMANO / PERSONAL + LIVE DATA</span>
       </footer>
     </main>
   );
 }
 
-function countryHeadline(snapshot: NowSnapshot): string {
-  if (snapshot.observations === 0) return "Todavía no hay evidencia persistida.";
-  return `${snapshot.sourcesWithEvidence} fuentes oficiales están entregando evidencia.`;
+function personalHeadline(snapshot: NowSnapshot): string {
+  if (!snapshot.profile?.homeCommune && !snapshot.profile?.homeRegion) return "Configura tu contexto para saber qué te afecta.";
+  if (snapshot.personalAttentionCount > 0) {
+    return `${snapshot.personalAttentionCount} ${snapshot.personalAttentionCount === 1 ? "señal requiere" : "señales requieren"} tu atención.`;
+  }
+  if (snapshot.personalSignals.length > 0) {
+    return `${snapshot.personalSignals.length} ${snapshot.personalSignals.length === 1 ? "señal es relevante" : "señales son relevantes"} para ti.`;
+  }
+  return "Sin señales cercanas que requieran atención.";
+}
+
+function personalStatus(snapshot: NowSnapshot): string {
+  const profile = snapshot.profile;
+  if (!profile?.homeCommune && !profile?.homeRegion) {
+    return "Agrega tu comuna y región. ANTEMANO cruzará esa ubicación con la Capa País real, sin datos de ejemplo.";
+  }
+  const place = profile.homeCommune ?? profile.homeRegion ?? "tu ubicación";
+  return `Perfil ubicado en ${place}. Se comparan observaciones oficiales por comuna, región y hasta 80 km cuando existe georreferencia.`;
+}
+
+function profileSummary(snapshot: NowSnapshot): string {
+  const profile = snapshot.profile;
+  if (!profile) return "Perfil personal incompleto.";
+  if (profile.vehicleName && profile.fuelType) return `${profile.vehicleName} · ${fuelTypeLabel(profile.fuelType)}`;
+  if (profile.vehicleName) return profile.vehicleName;
+  if (profile.fuelType) return fuelTypeLabel(profile.fuelType) ?? "Combustible configurado";
+  return `${profile.homeCommune ?? "Ubicación configurada"} · falta tu auto`;
+}
+
+function profileDetail(snapshot: NowSnapshot): string {
+  const profile = snapshot.profile;
+  if (!profile) return "Configura ubicación, vehículo, combustible y capacidad de estanque.";
+  if (profile.fuelType && profile.tankCapacityLiters) {
+    return `Cuando exista precio CNE regional para ${fuelTypeLabel(profile.fuelType)}, ANTEMANO calculará cuánto cuesta llenar ${profile.tankCapacityLiters} litros y cómo cambia ese costo.`;
+  }
+  return "Completa auto, tipo de combustible y litros de estanque para transformar señales de precio en impacto personal.";
 }
 
 function countryStatus(snapshot: NowSnapshot): string {
-  if (snapshot.observations === 0) return "Los conectores aún no han escrito datos en esta base.";
+  if (snapshot.observations === 0) return "Todavía no hay evidencia persistida.";
   const latest = formatChileDate(snapshot.latestSignalAt);
-  return `${numberFormat.format(snapshot.observations)} observaciones reales almacenadas. Última señal: ${latest}. ${snapshot.freshSources24h} fuentes tienen datos de las últimas 24 horas.`;
+  return `${numberFormat.format(snapshot.observations)} observaciones reales de ${snapshot.sourcesWithEvidence} fuentes. Última señal: ${latest}. ${snapshot.freshSources24h} fuentes tienen datos de las últimas 24 horas.`;
 }
 
 function operationalTitle(snapshot: NowSnapshot): string {
@@ -222,7 +340,7 @@ function operationalTitle(snapshot: NowSnapshot): string {
 function operationalDetail(snapshot: NowSnapshot): string {
   if (snapshot.escalatedEvents > 0) return "Hay exposición persistida y escalada. Revisa su evidencia y ruta de dependencia.";
   if (snapshot.activeEvents > 0) return "Hay señales oficiales que coinciden con dependencias configuradas en el grafo.";
-  if (snapshot.graphNodes === 0) return "No inventamos plantas, proveedores ni rutas. Hay que cargar dependencias reales antes de elevar las señales del país a eventos de negocio.";
+  if (snapshot.graphNodes === 0) return "El perfil personal puede funcionar sin grafo empresarial. El grafo sólo se usa para dependencias reales de una organización.";
   return "El grafo existe, pero ninguna señal actual produce una exposición operacional persistida.";
 }
 
@@ -248,6 +366,10 @@ function signalLabel(value: string): string {
     "economy.agriculture.wholesale_price.average": "Precio mayorista agrícola",
     "economy.agriculture.wholesale_volume": "Volumen mayorista agrícola",
     "energy.generation.monthly_mwh": "Generación eléctrica mensual",
+    "energy.fuel.liquid.retail_price_regional": "Precio regional de combustible",
+    "energy.fuel.liquid.sales_volume_monthly": "Venta de combustibles",
+    "geophysical.earthquake.event": "Sismo",
+    "geophysical.volcano.alert": "Alerta volcánica",
   };
   return labels[value] ?? humanize(value);
 }
@@ -257,6 +379,18 @@ function signalLocation(signal: NowSignal): string {
   if (signal.commune) return signal.commune;
   if (signal.region) return shortRegion(signal.region);
   return "Chile";
+}
+
+function personalReason(signal: PersonalSignal): string {
+  if (signal.relevance === "comuna") return "Misma comuna";
+  if (signal.relevance === "cercania") return signal.distanceKm !== undefined ? `${Math.round(signal.distanceKm)} km` : "Cercana";
+  return "Misma región";
+}
+
+function personalReasonDetail(signal: PersonalSignal): string {
+  if (signal.relevance === "comuna") return "Coincide con tu comuna";
+  if (signal.relevance === "cercania") return `A ${Math.round(signal.distanceKm ?? 0)} km de tu ubicación de referencia`;
+  return "Coincide con tu región";
 }
 
 function shortRegion(region: string): string {
@@ -271,7 +405,7 @@ function shortRegion(region: string): string {
 
 function severityClass(severity?: string): string {
   if (severity === "critical" || severity === "high") return "unavailable";
-  if (severity === "warning") return "degraded";
+  if (severity === "warning" || severity === "watch") return "degraded";
   if (severity === "info") return "healthy";
   return "neutral";
 }
