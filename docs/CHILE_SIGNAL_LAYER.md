@@ -1,10 +1,10 @@
-# ANTES — Capa País Chile
+# ANTEMANO — Capa País Chile
 
 ## Objetivo
 
-La **Capa País** convierte fuentes públicas oficiales de Chile en señales externas reutilizables por ANTES.
+La **Capa País** convierte fuentes públicas oficiales de Chile en señales externas reutilizables por ANTEMANO.
 
-La idea es que un nuevo cliente no parta desde cero: antes de conectar SAP, SCADA, WMS, TMS o sensores privados, ANTES ya puede observar contexto meteorológico, hídrico, logístico, energético, sísmico, regulatorio y macroeconómico del país.
+La idea es que un nuevo cliente no parta desde cero: antes de conectar SAP, SCADA, WMS, TMS o sensores privados, ANTEMANO ya puede observar contexto meteorológico, hídrico, logístico, energético, sísmico, regulatorio y macroeconómico del país.
 
 La Capa País no reemplaza los datos del cliente. Los contextualiza.
 
@@ -15,7 +15,7 @@ NORMALIZACIÓN + PROVENANCE
         ↓
 GEO / TIME / ENTITY MATCHING
         ↓
-ANTES GRAPH
+ANTEMANO GRAPH
         ↓
 EVENT CANDIDATES
         ↓
@@ -41,7 +41,7 @@ El modelo de demanda identifica sensibilidad histórica al calor
         ↓
 Inventario disponible + capacidad logística indican riesgo
         ↓
-ANTES genera candidato de evento
+ANTEMANO genera candidato de evento
 ```
 
 La fuente pública aporta contexto. El Event Graph determina relevancia. Los motores predictivos estiman consecuencia.
@@ -66,7 +66,7 @@ La fuente pública aporta contexto. El Event Graph determina relevancia. Los mot
 
 DMC dispone de servicios web y productos JSON/GeoJSON para consumo por aplicaciones, incluyendo catastro de estaciones y datos del modelo WRF-DMC mediante usuario y API key.
 
-### Casos ANTES
+### Casos ANTEMANO
 
 - peak de demanda;
 - riesgo de stockout asociado al clima;
@@ -81,7 +81,7 @@ DMC dispone de servicios web y productos JSON/GeoJSON para consumo por aplicacio
 
 **Integrar primero.**
 
-Es una de las mejores fuentes para demostrar que ANTES puede observar una condición externa antes de que aparezca en los sistemas internos de una empresa.
+Es una de las mejores fuentes para demostrar que ANTEMANO puede observar una condición externa antes de que aparezca en los sistemas internos de una empresa.
 
 ---
 
@@ -102,7 +102,7 @@ Es una de las mejores fuentes para demostrar que ANTES puede observar una condic
 
 La Red Hidrométrica Nacional dispone de miles de estaciones y una parte significativa transmite datos en línea. Muchas observaciones se actualizan aproximadamente cada hora. Debe validarse para cada recurso si existe un endpoint estable o si la integración debe realizarse mediante los servicios de consulta/descarga publicados por DGA.
 
-### Casos ANTES
+### Casos ANTEMANO
 
 - seguridad hídrica;
 - restricciones de producción;
@@ -137,7 +137,7 @@ Para alimentos, bebidas, minería, agroindustria y utilities puede transformarse
 
 El Observatorio Logístico dispone de API REST con autenticación por API key y respuestas JSON. El catálogo contiene cientos de recursos y algunos conjuntos poseen actualización diaria o de alta frecuencia operacional.
 
-### Casos ANTES
+### Casos ANTEMANO
 
 - retraso de proveedor;
 - congestión portuaria;
@@ -170,7 +170,7 @@ Es especialmente potente para una demo de supply chain porque permite combinar u
 
 LeyChile dispone de una API oficial. Entre sus servicios existe una consulta de normas nuevas o modificadas en un rango temporal y endpoints JSON/XML para recuperar normas y sus versiones.
 
-### Casos ANTES
+### Casos ANTEMANO
 
 - riesgo regulatorio;
 - nuevas obligaciones de operación;
@@ -183,7 +183,7 @@ LeyChile dispone de una API oficial. Entre sus servicios existe una consulta de 
 
 ### Prioridad
 
-**Integrar en el core de ANTES.**
+**Integrar en el core de ANTEMANO.**
 
 Esta fuente permite construir una capacidad diferencial: detectar una modificación regulatoria, clasificar qué procesos del cliente podrían estar afectados y generar una revisión antes de que el cambio llegue por correo o asesoría manual.
 
@@ -207,7 +207,7 @@ Esta fuente permite construir una capacidad diferencial: detectar una modificaci
 
 La BDE dispone de API REST autenticada mediante token y un catálogo de series. El servicio mantiene límites de consulta por cuenta, pero permite automatización continua.
 
-### Casos ANTES
+### Casos ANTEMANO
 
 - presión de costos en insumos importados;
 - exposición cambiaria;
@@ -238,7 +238,7 @@ P1. Muy útil para `cost_risk`, `supplier_risk` y escenarios, pero suele operar 
 
 Energía Abierta declara una API para consumir directamente los datos publicados por la CNE.
 
-### Casos ANTES
+### Casos ANTEMANO
 
 - presión de costos energéticos;
 - disponibilidad;
@@ -266,7 +266,7 @@ P1 para manufactura, minería, data centers, utilities y operaciones con alto co
 
 El SIP dispone de una API pública documentada. Algunos endpoints históricos han sido reemplazados por nuevas versiones, por lo que el connector debe implementar versionado y health checks.
 
-### Casos ANTES
+### Casos ANTEMANO
 
 - riesgo eléctrico;
 - stress de sistema;
@@ -289,7 +289,7 @@ El SIP dispone de una API pública documentada. Algunos endpoints históricos ha
 
 SENAPRED es una fuente oficial de alto valor, pero no se debe asumir una API pública estable sin verificar cada canal. Para el producto debe implementarse como `official_alert_source` con provenance y un connector desacoplado, de modo que el mecanismo de ingestión pueda cambiar sin alterar el dominio.
 
-### Casos ANTES
+### Casos ANTEMANO
 
 - cierre o afectación de instalaciones;
 - rutas expuestas;
@@ -311,14 +311,14 @@ SENAPRED es una fuente oficial de alto valor, pero no se debe asumir una API pú
 
 Existe acceso mediante servicios FDSN Web Services basados en SeisComP.
 
-### Casos ANTES
+### Casos ANTEMANO
 
 - evaluación automática de exposición de instalaciones;
 - rutas y bodegas;
 - continuidad operacional;
 - activación de protocolos de inspección tras evento.
 
-La predicción sísmica no forma parte del alcance. ANTES usa el evento observado para anticipar propagación operacional posterior.
+La predicción sísmica no forma parte del alcance. ANTEMANO usa el evento observado para anticipar propagación operacional posterior.
 
 ---
 
@@ -331,7 +331,7 @@ La predicción sísmica no forma parte del alcance. ANTES usa el evento observad
 - vigilancia de volcanes priorizados;
 - cartografía de amenazas.
 
-### Casos ANTES
+### Casos ANTEMANO
 
 - ceniza sobre rutas o instalaciones;
 - afectación logística;
@@ -391,7 +391,7 @@ Dispone de API CKAN y DataStore:
 /api/3/action/datastore_search_sql
 ```
 
-ANTES puede usarlo para dos cosas:
+ANTEMANO puede usarlo para dos cosas:
 
 1. descubrir nuevas fuentes públicas relevantes;
 2. incorporar datasets específicos que ya estén publicados en DataStore.
@@ -531,7 +531,7 @@ Una empresa ficticia de bebidas tiene:
 - 10 SKU;
 - rutas urbanas.
 
-ANTES observa:
+ANTEMANO observa:
 
 1. pronóstico DMC;
 2. señales de capacidad/operación logística portuaria;
@@ -555,11 +555,11 @@ Los datos del Gobierno permanecen reales y citables. La operación corporativa p
 
 La Capa País puede convertirse en una ventaja comercial reusable:
 
-## ANTES / Capa País
+## ANTEMANO / Capa País
 
 **Inteligencia externa oficial conectada desde el primer día.**
 
-Un piloto ANTES 90 no parte sólo de los datos internos que el cliente logre entregar. Parte también de un conjunto de señales oficiales ya normalizadas, versionadas y listas para correlacionarse con su operación.
+Un piloto ANTEMANO 90 no parte sólo de los datos internos que el cliente logre entregar. Parte también de un conjunto de señales oficiales ya normalizadas, versionadas y listas para correlacionarse con su operación.
 
 El activo N3uralia no es poseer los datos públicos. Es la capacidad de:
 
