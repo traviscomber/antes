@@ -57,6 +57,17 @@ export const chileSignalSources = [
     description: "Official river-flow readings and DGA alert levels from the hydrometeorological network.",
   },
   {
+    id: "cl.dga.reservoirs-vipnet",
+    name: "DGA VIPNet Embalses",
+    authority: "Dirección General de Aguas",
+    domain: "water",
+    authMode: "none",
+    cadence: "Hourly completed-window snapshot",
+    priority: "P0",
+    canonicalUrl: "https://vipnet.mop.gob.cl/",
+    description: "Current reservoir-volume snapshots from the DGA Visualizador Hidrométrico Nacional using VIPNet's official latest-value statistic.",
+  },
+  {
     id: "cl.mop.vialidad.emergencias",
     name: "MOP Emergencias Viales",
     authority: "Dirección de Vialidad, Ministerio de Obras Públicas",
