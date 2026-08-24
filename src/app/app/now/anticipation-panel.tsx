@@ -83,7 +83,7 @@ export async function AnticipationPanel() {
                     <p className="sourceAuthority">{item.source_name}</p>
                     <h4>{anticipationLabel(item.signal_type)}</h4>
                   </div>
-                  <span className={`statusBadge ${item.level === "critical" ? "critical" : "warning"}`}>
+                  <span className={`statusBadge ${item.level === "critical" ? "unavailable" : "degraded"}`}>
                     {formatLeadTime(leadMinutes)}
                   </span>
                 </div>
