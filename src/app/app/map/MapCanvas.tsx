@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { Map as LeafletMap, LayerGroup } from "leaflet";
 import type { MapLayer, MapPoint } from "@/lib/map/read-model";
 import type { PersonalAlert } from "@/lib/now/read-model";
 import styles from "./map.module.css";
@@ -20,11 +21,99 @@ const defaultActive: Category[] = ["infrastructure", "services", "territory", "c
 export default function MapCanvas({ latitude, longitude, points, alerts, location }: { latitude: number; longitude: number; points: MapPoint[]; alerts: PersonalAlert[]; location: string }) {
   const [active, setActive] = useState<Set<Category>>(() => new Set(defaultActive));
   const [selected, setSelected] = useState<MapPoint | null>(null);
-  const bounds = useMemo(() => computeBounds(latitude, longitude, points), [latitude, longitude, points]);
+  const mapNodeRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<LeafletMap | null>(null);
+  const markerLayerRef = useRef<LayerGroup | null>(null);
+  const didFitRef = useRef(false);
+
   const enabledLayers = useMemo(() => new Set([...active].flatMap((category) => categoryMeta[category].layers)), [active]);
-  const visible = points.filter((point) => enabledLayers.has(point.layer));
-  const mapUrl = osmEmbed(bounds);
+  const visible = useMemo(() => points.filter((point) => enabledLayers.has(point.layer)), [points, enabledLayers]);
   const alertGroups = groupAlerts(alerts);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function mountMap() {
+      if (!mapNodeRef.current || mapRef.current) return;
+      const L = await import("leaflet");
+      if (cancelled || !mapNodeRef.current) return;
+
+      const map = L.map(mapNodeRef.current, {
+        zoomControl: true,
+        attributionControl: true,
+        preferCanvas: true,
+      }).setView([latitude, longitude], 9);
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 18,
+        attribution: "© OpenStreetMap contributors",
+      }).addTo(map);
+
+      markerLayerRef.current = L.layerGroup().addTo(map);
+      mapRef.current = map;
+
+      requestAnimationFrame(() => map.invalidateSize());
+    }
+
+    void mountMap();
+    return () => { cancelled = true; };
+  }, [latitude, longitude]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function syncMarkers() {
+      const map = mapRef.current;
+      const layer = markerLayerRef.current;
+      if (!map || !layer) {
+        window.setTimeout(() => { if (!cancelled) void syncMarkers(); }, 40);
+        return;
+      }
+
+      const L = await import("leaflet");
+      if (cancelled) return;
+      layer.clearLayers();
+
+      const homeIcon = L.divIcon({
+        className: "",
+        html: `<span class="${styles.leafletHome}" aria-label="Tu ubicación"></span>`,
+        iconSize: [16, 16],
+        iconAnchor: [8, 8],
+      });
+      L.marker([latitude, longitude], { icon: homeIcon, zIndexOffset: 2000, keyboard: true, title: "Tu ubicación" }).addTo(layer);
+
+      for (const point of visible) {
+        const icon = L.divIcon({
+          className: "",
+          html: `<span class="${styles.leafletMarker} ${styles[`marker_${point.layer}`]}">${markerIcon(point.layer)}</span>`,
+          iconSize: [30, 30],
+          iconAnchor: [15, 15],
+        });
+        const marker = L.marker([point.latitude, point.longitude], {
+          icon,
+          keyboard: true,
+          title: `${point.title} · ${point.distanceKm.toFixed(1)} km`,
+        }).addTo(layer);
+        marker.on("click", () => setSelected(point));
+      }
+
+      if (!didFitRef.current) {
+        const initialPoints = points.filter((point) => point.distanceKm <= 85 && point.layer !== "seismic" && point.layer !== "coastal");
+        const latLngs: [number, number][] = [[latitude, longitude], ...initialPoints.map((point) => [point.latitude, point.longitude] as [number, number])];
+        if (latLngs.length > 1) map.fitBounds(L.latLngBounds(latLngs), { padding: [34, 34], maxZoom: 10 });
+        didFitRef.current = true;
+      }
+    }
+
+    void syncMarkers();
+    return () => { cancelled = true; };
+  }, [latitude, longitude, points, visible]);
+
+  useEffect(() => () => {
+    mapRef.current?.remove();
+    mapRef.current = null;
+    markerLayerRef.current = null;
+  }, []);
 
   function toggle(category: Category) {
     setActive((current) => {
@@ -50,11 +139,7 @@ export default function MapCanvas({ latitude, longitude, points, alerts, locatio
       </div>
 
       <div className={styles.mapFrame}>
-        <iframe title={`Mapa operacional de ${location}`} src={mapUrl} loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
-        <div className={styles.overlay} aria-label="Señales georreferenciadas">
-          <button type="button" className={`${styles.marker} ${styles.markerHome}`} style={markerStyle(latitude, longitude, bounds)} title="Tu ubicación" onClick={() => setSelected(null)}>●</button>
-          {visible.map((point) => <button key={point.id} type="button" className={`${styles.marker} ${styles[`marker_${point.layer}`]}`} style={markerStyle(point.latitude, point.longitude, bounds)} title={`${point.title} · ${point.distanceKm.toFixed(1)} km`} onClick={() => setSelected(point)}>{markerIcon(point.layer)}</button>)}
-        </div>
+        <div ref={mapNodeRef} className={styles.leafletMap} aria-label={`Mapa operacional de ${location}`} />
         <div className={styles.status}><b>● Actualizado ahora</b><span>{visible.length} señales visibles</span><span>radio máx. 120 km</span></div>
         <div className={styles.legend}><span><i style={{background:"#ff5f59"}}/>Crítica</span><span><i style={{background:"#f2a02f"}}/>Advertencia</span><span><i style={{background:"#e1ca44"}}/>Vigilancia</span><span><i style={{background:"#3d7e5b"}}/>Informativa</span><span><i style={{background:"#245d9c"}}/>Marítima</span></div>
         {selected ? <div className={styles.popup}>
@@ -98,17 +183,3 @@ function sourceLabel(source:string){if(/mop/i.test(source))return "MOP";if(/saes
 function markerIcon(layer:MapLayer){return layer==="power"?"ϟ":layer==="roads"||layer==="alerts"?"△":layer==="coastal"?"≈":layer==="seismic"?"◉":layer==="fires"?"▲":"▣";}
 function layerLabel(layer:MapLayer){return ({alerts:"Alertas",power:"Electricidad",roads:"Infraestructura",air:"Aire",fuel:"Combustible",water:"Agua",coastal:"Costa",fires:"Incendios",seismic:"Sismos",weather:"Meteorología"} as Record<MapLayer,string>)[layer];}
 function localizeValue(value:string){return value.replace(/(\d+)\s+affected_customers/gi,"$1 clientes afectados").replace(/affected customers/gi,"clientes afectados").replace(/customers affected/gi,"clientes afectados");}
-
-type Bounds = { west: number; east: number; south: number; north: number };
-function computeBounds(lat: number, lon: number, points: MapPoint[]): Bounds {
-  const nearby = points.filter((p) => p.distanceKm <= 85 && p.layer !== "seismic" && p.layer !== "coastal");
-  const lats = [lat, ...nearby.map((p) => p.latitude)];
-  const lons = [lon, ...nearby.map((p) => p.longitude)];
-  const minLat = Math.min(...lats), maxLat = Math.max(...lats), minLon = Math.min(...lons), maxLon = Math.max(...lons);
-  const latPad = Math.max((maxLat - minLat) * .16, .12);
-  const lonPad = Math.max((maxLon - minLon) * .16, .16);
-  return { south: minLat - latPad, north: maxLat + latPad, west: minLon - lonPad, east: maxLon + lonPad };
-}
-function markerStyle(lat: number, lon: number, b: Bounds): CSSProperties { const left=((lon-b.west)/(b.east-b.west))*100; const northY=mercatorY(b.north),southY=mercatorY(b.south),pointY=mercatorY(lat); const top=((northY-pointY)/(northY-southY))*100; return {left:`${Math.max(1,Math.min(99,left))}%`,top:`${Math.max(1,Math.min(99,top))}%`}; }
-function mercatorY(latitude:number){const clamped=Math.max(-85.05112878,Math.min(85.05112878,latitude));const radians=clamped*Math.PI/180;return Math.log(Math.tan(Math.PI/4+radians/2));}
-function osmEmbed(b:Bounds){return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(`${b.west},${b.south},${b.east},${b.north}`)}&layer=mapnik`;}
