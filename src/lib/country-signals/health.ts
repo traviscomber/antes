@@ -33,6 +33,7 @@ import { RioenLineaRegionalNewsConnector } from "./connectors/rioenlinea";
 import { SaesaPowerOutageConnector } from "./connectors/saesa";
 import { SenapredOfficialAlertConnector } from "./connectors/senapred";
 import { probeSernageominVolcanicAlertHealth } from "./connectors/sernageomin";
+import { probeShoACitsuHealth } from "./connectors/shoa-citsu";
 import { SincaAirQualityConnector } from "./connectors/sinca";
 import {
   SeaSeiaProjectConnector,
@@ -79,6 +80,7 @@ export async function getChileSignalHealth(): Promise<SourceHealth[]> {
   activeChecks.set("cl.conaf.boton-rojo", probeConafRedButtonStoryMapHealth());
   activeChecks.set("cl.chilecompra.ocds", probeChileCompraOcdsHealth());
   activeChecks.set("cl.sernageomin.volcanic-alerts", probeSernageominVolcanicAlertHealth());
+  activeChecks.set("cl.shoa.citsu", probeShoACitsuHealth());
 
   return Promise.all(
     chileSignalSources.map(async (source) => {
