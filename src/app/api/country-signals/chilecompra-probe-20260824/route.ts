@@ -13,26 +13,58 @@ const TYPES = [
 ] as const;
 
 export async function GET() {
-  const now = chileParts(new Date());
+  const current = chileYearMonth(new Date());
   const results = await Promise.all(
-    TYPES.map(async ([name, route]) => {
-      const first = await getJson(`${BASE}/${route}/${now.year}/${now.month}/0/5`);
+    TYPES.map(async ([name, route]) => ({
+      name,
+      route,
+      ...(await findNewestAvailable(route, current.year, current.month)),
+    })),
+  );
+  return NextResponse.json({ generatedAt: new Date().toISOString(), current, results });
+}
+
+async function findNewestAvailable(route: string, year: number, month: number) {
+  const attempts: { period: string; status: number; sourceStatus?: number; detail?: string }[] = [];
+  let cursor = { year, month };
+  for (let offset = 0; offset < 18; offset += 1) {
+    const period = `${cursor.year}-${String(cursor.month).padStart(2, "0")}`;
+    const first = await getJson(
+      `${BASE}/${route}/${cursor.year}/${String(cursor.month).padStart(2, "0")}/0/5`,
+    );
+    const sourceStatus = isObject(first.payload) ? numeric(first.payload.status) : undefined;
+    const detail = isObject(first.payload) && typeof first.payload.detail === "string"
+      ? first.payload.detail
+      : undefined;
+    attempts.push({ period, status: first.status, sourceStatus, detail });
+
+    if (hasData(first.payload)) {
       const total = findTotal(first.payload);
       const lastStart = total !== undefined ? Math.max(0, total - 5) : undefined;
       const last = lastStart !== undefined && lastStart > 0
-        ? await getJson(`${BASE}/${route}/${now.year}/${now.month}/${lastStart}/${total}`)
+        ? await getJson(
+            `${BASE}/${route}/${cursor.year}/${String(cursor.month).padStart(2, "0")}/${lastStart}/${total}`,
+          )
         : undefined;
       return {
-        name,
-        route,
-        first: summarize(first),
+        newestAvailablePeriod: period,
+        monthsLag: offset,
         total,
-        lastStart,
+        first: summarize(first),
         last: last ? summarize(last) : null,
+        attempts,
       };
-    }),
-  );
-  return NextResponse.json({ generatedAt: new Date().toISOString(), period: now, results });
+    }
+    cursor = previousMonth(cursor.year, cursor.month);
+  }
+  return {
+    newestAvailablePeriod: null,
+    monthsLag: null,
+    total: null,
+    first: null,
+    last: null,
+    attempts,
+  };
 }
 
 async function getJson(url: string) {
@@ -40,7 +72,7 @@ async function getJson(url: string) {
   const response = await fetch(url, {
     headers: { Accept: "application/json", "User-Agent": USER_AGENT },
     cache: "no-store",
-    signal: AbortSignal.timeout(25_000),
+    signal: AbortSignal.timeout(20_000),
   });
   const text = await response.text();
   let payload: unknown;
@@ -50,6 +82,13 @@ async function getJson(url: string) {
     payload = { raw: text.slice(0, 3_000) };
   }
   return { status: response.status, elapsedMs: Date.now() - startedAt, payload };
+}
+
+function hasData(value: unknown): boolean {
+  if (Array.isArray(value)) return value.length > 0;
+  if (!isObject(value)) return false;
+  if (numeric(value.status) === 404) return false;
+  return Object.values(value).some(hasData);
 }
 
 function summarize(result: Awaited<ReturnType<typeof getJson>>) {
@@ -70,8 +109,8 @@ function findTotal(value: unknown): number | undefined {
   if (!isObject(value)) return undefined;
   for (const [key, child] of Object.entries(value)) {
     if (/total|cantidad|count/i.test(key)) {
-      const number = numeric(child);
-      if (number !== undefined) return number;
+      const parsed = numeric(child);
+      if (parsed !== undefined) return parsed;
     }
   }
   for (const child of Object.values(value)) {
@@ -107,7 +146,7 @@ function numeric(value: unknown): number | undefined {
   return undefined;
 }
 
-function chileParts(date: Date) {
+function chileYearMonth(date: Date): { year: number; month: number } {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Santiago",
     year: "numeric",
@@ -115,7 +154,11 @@ function chileParts(date: Date) {
   }).formatToParts(date);
   const read = (type: Intl.DateTimeFormatPartTypes) =>
     parts.find((part) => part.type === type)?.value ?? "";
-  return { year: read("year"), month: read("month") };
+  return { year: Number(read("year")), month: Number(read("month")) };
+}
+
+function previousMonth(year: number, month: number): { year: number; month: number } {
+  return month === 1 ? { year: year - 1, month: 12 } : { year, month: month - 1 };
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
