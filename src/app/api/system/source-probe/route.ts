@@ -14,8 +14,8 @@ export async function GET(request: NextRequest) {
   }
 
   const targets = [
-    "https://www.bcn.cl/leychile/leychile-api-doc/assets/leychile-api-doc-v1.yaml",
-    "https://www.bcn.cl/leychile/leychile-api-doc/leychile-api-doc",
+    "https://www.bcn.cl/leychile/api/v1/servicio/3/?cantidad=10",
+    "https://www.bcn.cl/leychile/leychile-api-doc/paths/servicio_3_v1.yaml",
   ];
 
   const results = await Promise.all(
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
       try {
         const response = await fetch(url, {
           headers: {
-            Accept: "text/yaml,text/plain,text/html;q=0.8,*/*;q=0.5",
+            Accept: "application/xml,text/yaml,text/plain;q=0.9,*/*;q=0.5",
             "User-Agent": "N3uralia-ANTEMANO/0.1 (+https://www.antemano.app)",
           },
           cache: "no-store",
