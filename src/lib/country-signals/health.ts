@@ -27,6 +27,9 @@ import {
 } from "./connectors/mop-live-overrides";
 import { ObservatorioLogisticoConnector } from "./connectors/observatorio-logistico";
 import { OdepaWholesaleProduceConnector } from "./connectors/odepa-wholesale";
+import { RioenLineaRegionalNewsConnector } from "./connectors/rioenlinea";
+import { SaesaPowerOutageConnector } from "./connectors/saesa";
+import { SenapredOfficialAlertConnector } from "./connectors/senapred";
 import { probeSernageominVolcanicAlertHealth } from "./connectors/sernageomin";
 import { SincaAirQualityConnector } from "./connectors/sinca";
 import {
@@ -49,6 +52,9 @@ export async function getChileSignalHealth(): Promise<SourceHealth[]> {
     new BorderCrossingsConnector(),
     new MopAllInfrastructureEmergenciesConnector(),
     new ConafActiveFiresConnector(),
+    new SenapredOfficialAlertConnector(),
+    new SaesaPowerOutageConnector(),
+    new RioenLineaRegionalNewsConnector(),
     ...cenSipSourceIds.map((sourceId) => createCenSipConnector(sourceId)),
     new BancoCentralConnector(),
     new OdepaWholesaleProduceConnector(),
