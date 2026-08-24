@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
 import { PERSONAL_ALERT_RULE_VERSION, type PersonalAlertBatchResult } from "./personal-alerts";
+import { projectDirectemarMarineAlerts } from "./personal-alerts-marine";
 import { refreshPersonalAlertsForAllUsersWithWater } from "./personal-alerts-water-service";
 
 const DMC_SOURCE_ID = "cl.dmc.official-alerts";
@@ -34,11 +35,14 @@ export async function refreshPersonalAlertsForAllCriticalSources(
   options: { sourceId?: string } = {},
 ): Promise<PersonalAlertBatchResult> {
   const base = await refreshPersonalAlertsForAllUsersWithWater(options);
-  const dmc = await projectDmcOfficialAlerts();
+  const [dmc, marine] = await Promise.all([
+    projectDmcOfficialAlerts(),
+    projectDirectemarMarineAlerts(),
+  ]);
   return {
-    usersEvaluated: Math.max(base.usersEvaluated, dmc.usersEvaluated),
-    activeAlerts: base.activeAlerts + dmc.activeAlerts,
-    resolvedAlerts: base.resolvedAlerts + dmc.resolvedAlerts,
+    usersEvaluated: Math.max(base.usersEvaluated, dmc.usersEvaluated, marine.usersEvaluated),
+    activeAlerts: base.activeAlerts + dmc.activeAlerts + marine.activeAlerts,
+    resolvedAlerts: base.resolvedAlerts + dmc.resolvedAlerts + marine.resolvedAlerts,
   };
 }
 
