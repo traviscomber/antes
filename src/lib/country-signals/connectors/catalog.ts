@@ -21,6 +21,10 @@ import {
 import { ObservatorioLogisticoConnector } from "./observatorio-logistico";
 import { OdepaWholesaleProduceConnector } from "./odepa-wholesale";
 import { SincaAirQualityConnector } from "./sinca";
+import {
+  SeaSeiaProjectConnector,
+  SmaSnifaSanctioningConnector,
+} from "./sma-sea";
 
 export function createCountrySignalConnector(
   sourceId: string,
@@ -66,6 +70,10 @@ export function createCountrySignalConnector(
       return new BancoCentralConnector();
     case "cl.odepa.wholesale-produce":
       return new OdepaWholesaleProduceConnector();
+    case "cl.sma.snifa-sanctioning":
+      return new SmaSnifaSanctioningConnector();
+    case "cl.sea.seia-projects":
+      return new SeaSeiaProjectConnector();
     case "cl.chilecompra.daily-tenders":
       return new ChileCompraDailyTenderConnector();
     case "cl.cne.liquid-fuel-prices":
