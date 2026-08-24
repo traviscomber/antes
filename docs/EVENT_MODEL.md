@@ -1,10 +1,10 @@
-# ANTES — Modelo Canónico de Eventos
+# ANTEMANO — Modelo Canónico de Eventos
 
 ## Propósito
 
 El evento es la unidad central del producto.
 
-ANTES no debe confundir:
+ANTEMANO no debe confundir:
 
 - una lectura de sensor;
 - una anomalía matemática;
@@ -22,7 +22,7 @@ Separar estos conceptos permite medir precisión, explicar por qué se generó u
 
 ### Organization
 
-Tenant raíz de ANTES.
+Tenant raíz de ANTEMANO.
 
 Campos conceptuales:
 
@@ -228,7 +228,7 @@ Un candidato todavía puede ser ruido.
 
 ### Event
 
-Evento operacional correlacionado que ANTES considera relevante.
+Evento operacional correlacionado que ANTEMANO considera relevante.
 
 ```text
 id
@@ -351,7 +351,7 @@ custom
 
 ### Recommendation
 
-Recomendación emitida por ANTES.
+Recomendación emitida por ANTEMANO.
 
 ```text
 id
@@ -450,7 +450,7 @@ Los criterios internos exactos de transición forman parte de la lógica propiet
 
 ## Time-to-Impact
 
-ANTES diferencia tres timestamps:
+ANTEMANO diferencia tres timestamps:
 
 ```text
 detected_at
@@ -539,7 +539,7 @@ useful action window
 recommended review/action or explicit human decision request
 ```
 
-No todos los eventos necesitan impacto económico. Si no existe evidencia para calcularlo, ANTES debe mostrar impacto operacional sin inventar monetización.
+No todos los eventos necesitan impacto económico. Si no existe evidencia para calcularlo, ANTEMANO debe mostrar impacto operacional sin inventar monetización.
 
 ---
 
