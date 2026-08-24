@@ -331,6 +331,26 @@ Datos, permisos, modelos, trazabilidad y acciones deben diseñarse bajo mínimos
 
 ---
 
+## Desarrollo
+
+### Vercel
+
+El repositorio fija explícitamente el framework `nextjs` y deja `outputDirectory` en autodetección mediante `vercel.json`. Esto evita que una configuración de proyecto heredada intente publicar una carpeta estática `public` en lugar del output nativo de Next.js.
+
+### Postgres / Neon
+
+La persistencia usa `@neondatabase/serverless` detrás del contrato `CountrySignalStore`. La aplicación requiere una variable server-side:
+
+```text
+DATABASE_URL
+```
+
+No se deben guardar connection strings, passwords ni API keys en Git. Para previews, `DATABASE_URL` debe apuntar a una rama de desarrollo/preview; producción debe usar una rama y credenciales separadas.
+
+La vista `/app/sources` funciona incluso sin base configurada: muestra explícitamente `UNCONFIGURED` en lugar de simular conectividad.
+
+---
+
 ## Estado
 
 **Etapa actual:** definición y construcción de MVP.
