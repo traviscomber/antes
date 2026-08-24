@@ -14,38 +14,42 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  const sql = `select anio, mes, subsistema, clasificacion, tecnologia,
-    sum(cast(replace(generacion_mwh, ',', '.') as numeric)) as generacion_mwh,
-    max(fecha_act) as fecha_act
-    from "${RESOURCE_ID}"
-    where (cast(anio as integer), cast(mes as integer)) = (
-      select cast(anio as integer), cast(mes as integer)
-      from "${RESOURCE_ID}"
-      order by cast(anio as integer) desc, cast(mes as integer) desc
-      limit 1
-    )
-    group by anio, mes, subsistema, clasificacion, tecnologia
-    order by subsistema, clasificacion, tecnologia`;
+  const now = new Date();
+  const attempts: Array<{ year: number; month: number; status: number; total: number }> = [];
 
-  const url = new URL("https://datos.gob.cl/api/3/action/datastore_search_sql");
-  url.searchParams.set("sql", sql);
+  for (let offset = 0; offset < 18; offset += 1) {
+    const cursor = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - offset, 1));
+    const year = cursor.getUTCFullYear();
+    const month = cursor.getUTCMonth() + 1;
+    const url = new URL("https://datos.gob.cl/api/3/action/datastore_search");
+    url.searchParams.set("resource_id", RESOURCE_ID);
+    url.searchParams.set("limit", "5");
+    url.searchParams.set("filters", JSON.stringify({ anio: String(year), mes: String(month) }));
 
-  const response = await fetch(url, {
-    headers: {
-      Accept: "application/json",
-      "User-Agent": "N3uralia-ANTEMANO/0.1 (+https://www.antemano.app)",
-    },
-    cache: "no-store",
-    signal: AbortSignal.timeout(10_000),
-  });
-  const payload = (await response.json()) as Record<string, unknown>;
+    const response = await fetch(url, {
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "N3uralia-ANTEMANO/0.1 (+https://www.antemano.app)",
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
+    });
+    const payload = (await response.json()) as Record<string, unknown>;
+    const result = payload.result as Record<string, unknown> | undefined;
+    const total = typeof result?.total === "number" ? result.total : 0;
+    attempts.push({ year, month, status: response.status, total });
 
-  return NextResponse.json({
-    status: response.status,
-    success: payload.success,
-    result: payload.result,
-    error: payload.error,
-  });
+    if (response.ok && payload.success === true && total > 0) {
+      return NextResponse.json({
+        latest: { year, month, total },
+        fields: result?.fields,
+        records: result?.records,
+        attempts,
+      });
+    }
+  }
+
+  return NextResponse.json({ latest: null, attempts }, { status: 404 });
 }
 
 function validToken(token: string): boolean {
