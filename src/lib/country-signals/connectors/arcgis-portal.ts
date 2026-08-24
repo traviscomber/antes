@@ -1,6 +1,6 @@
 type JsonObject = Record<string, unknown>;
 
-const ARC_GIS_ITEMS_URL = "https://www.arcgis.com/sharing/rest/content/items";
+const DEFAULT_PORTAL_URL = "https://www.arcgis.com";
 const ITEM_ID_RE = /^[0-9a-f]{32}$/i;
 const SERVICE_URL_RE = /^https?:\/\/[^\s"']+\/rest\/services\/[^\s"']+\/(?:FeatureServer|MapServer)(?:\/\d+)?(?:\?.*)?$/i;
 const USER_AGENT = "N3uralia-ANTEMANO/0.1 (+https://www.antemano.app)";
@@ -16,6 +16,7 @@ export interface ArcGisPortalItemSummary {
 
 export interface ArcGisPortalReferenceSet {
   rootItemId: string;
+  portalUrl: string;
   items: ArcGisPortalItemSummary[];
   serviceUrls: string[];
 }
@@ -28,8 +29,10 @@ export interface ArcGisPortalReferences {
 export async function discoverArcGisPortalReferences(
   rootItemId: string,
   maxDepth = 2,
+  portalUrl = DEFAULT_PORTAL_URL,
 ): Promise<ArcGisPortalReferenceSet> {
   assertItemId(rootItemId);
+  const portal = normalizePortalUrl(portalUrl);
   const depthLimit = Math.min(Math.max(maxDepth, 0), 4);
   const items = new Map<string, ArcGisPortalItemSummary>();
   const serviceUrls = new Set<string>();
@@ -44,8 +47,8 @@ export async function discoverArcGisPortalReferences(
     visited.add(current.itemId);
 
     const [item, data] = await Promise.all([
-      fetchArcGisPortalItem(current.itemId),
-      fetchArcGisPortalItemData(current.itemId),
+      fetchArcGisPortalItem(current.itemId, portal),
+      fetchArcGisPortalItemData(current.itemId, portal),
     ]);
     items.set(item.id.toLowerCase(), item);
 
@@ -69,6 +72,7 @@ export async function discoverArcGisPortalReferences(
 
   return {
     rootItemId: rootItemId.toLowerCase(),
+    portalUrl: portal,
     items: [...items.values()].sort((a, b) => a.id.localeCompare(b.id)),
     serviceUrls: [...serviceUrls].sort(),
   };
@@ -76,9 +80,11 @@ export async function discoverArcGisPortalReferences(
 
 export async function fetchArcGisPortalItem(
   itemId: string,
+  portalUrl = DEFAULT_PORTAL_URL,
 ): Promise<ArcGisPortalItemSummary> {
   assertItemId(itemId);
-  const payload = await fetchPortalJson(`${ARC_GIS_ITEMS_URL}/${itemId}`);
+  const itemsUrl = `${normalizePortalUrl(portalUrl)}/sharing/rest/content/items`;
+  const payload = await fetchPortalJson(`${itemsUrl}/${itemId}`);
   throwIfArcGisPortalError(payload);
 
   const id = asString(payload.id);
@@ -96,9 +102,13 @@ export async function fetchArcGisPortalItem(
   };
 }
 
-export async function fetchArcGisPortalItemData(itemId: string): Promise<JsonObject> {
+export async function fetchArcGisPortalItemData(
+  itemId: string,
+  portalUrl = DEFAULT_PORTAL_URL,
+): Promise<JsonObject> {
   assertItemId(itemId);
-  const payload = await fetchPortalJson(`${ARC_GIS_ITEMS_URL}/${itemId}/data`);
+  const itemsUrl = `${normalizePortalUrl(portalUrl)}/sharing/rest/content/items`;
+  const payload = await fetchPortalJson(`${itemsUrl}/${itemId}/data`);
   throwIfArcGisPortalError(payload);
   return payload;
 }
@@ -155,6 +165,18 @@ function isArcGisServiceUrl(value: string): boolean {
 function normalizeServiceUrl(value: string): string {
   const url = new URL(value);
   url.protocol = "https:";
+  url.search = "";
+  url.hash = "";
+  return url.toString().replace(/\/$/, "");
+}
+
+function normalizePortalUrl(value: string): string {
+  const url = new URL(value);
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new Error("ArcGIS portal must use HTTP or HTTPS.");
+  }
+  url.protocol = "https:";
+  url.pathname = "";
   url.search = "";
   url.hash = "";
   return url.toString().replace(/\/$/, "");
