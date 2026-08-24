@@ -13,6 +13,7 @@ const CRITICAL_SOURCE_IDS = [
   "cl.senapred.official-alerts",
   "cl.dmc.official-alerts",
   "cl.directemar.marine-weather-alerts",
+  "cl.sec.power-outages-national",
   "cl.saesa.power-outages",
   "cl.aguas-decima.water-interruptions",
   "cl.conaf.active-fires",

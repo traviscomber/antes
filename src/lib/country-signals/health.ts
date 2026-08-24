@@ -95,8 +95,9 @@ export async function getChileSignalHealth(): Promise<SourceHealth[]> {
         sourceId: source.id,
         state: "planned" as const,
         checkedAt: new Date().toISOString(),
-        message:
-          "Source validated for product value, but no stable production connector has been enabled yet.",
+        message: source.id === "cl.sec.power-outages-national"
+          ? "SEC national outage connector is staged for a production-runtime connectivity probe; it is not yet used for personal alerts."
+          : "Source validated for product value, but no stable production connector has been enabled yet.",
       };
     }),
   );

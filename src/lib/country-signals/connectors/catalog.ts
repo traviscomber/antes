@@ -28,6 +28,7 @@ import { ObservatorioLogisticoConnector } from "./observatorio-logistico";
 import { OdepaWholesaleProduceConnector } from "./odepa-wholesale";
 import { RioenLineaRegionalNewsConnector } from "./rioenlinea";
 import { SaesaPowerOutageConnector } from "./saesa";
+import { SecNationalPowerOutageConnector } from "./sec-power-outages";
 import { SenapredOfficialAlertConnector } from "./senapred";
 import { SincaAirQualityConnector } from "./sinca";
 import {
@@ -69,6 +70,8 @@ export function createCountrySignalConnector(
       return new ConafActiveFiresConnector();
     case "cl.senapred.official-alerts":
       return new SenapredOfficialAlertConnector();
+    case "cl.sec.power-outages-national":
+      return new SecNationalPowerOutageConnector();
     case "cl.saesa.power-outages":
       return new SaesaPowerOutageConnector();
     case "cl.aguas-decima.water-interruptions":
