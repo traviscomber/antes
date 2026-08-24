@@ -142,7 +142,9 @@ export function fuelTypeLabel(value?: FuelType): string | undefined {
 
 export function fuelTypeMatchesSource(value: FuelType | undefined, sourceFuelType: string | undefined): boolean {
   if (!value || !sourceFuelType) return false;
-  const text = sourceFuelType.toLocaleLowerCase("es-CL");
+  const canonical = sourceFuelType.trim().toLocaleLowerCase("es-CL");
+  if (canonical === value) return true;
+  const text = canonical;
   if (value === "gasoline_93") return /93/.test(text) && /(gasolina|bencina)/.test(text);
   if (value === "gasoline_95") return /95/.test(text) && /(gasolina|bencina)/.test(text);
   if (value === "gasoline_97") return /97/.test(text) && /(gasolina|bencina)/.test(text);
