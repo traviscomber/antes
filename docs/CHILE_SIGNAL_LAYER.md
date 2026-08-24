@@ -2,299 +2,133 @@
 
 ## Objetivo
 
-La **Capa País** convierte fuentes públicas oficiales de Chile en señales externas reutilizables por ANTEMANO.
-
-Una organización no parte desde cero: antes de integrar todos sus sistemas internos, ANTEMANO puede observar contexto meteorológico, hídrico, logístico, energético, sísmico, regulatorio y macroeconómico del país.
-
-La Capa País no reemplaza los datos del cliente. Los contextualiza.
+La **Capa País** convierte fuentes públicas oficiales de Chile en señales externas trazables y reutilizables por ANTEMANO.
 
 ```text
-FUENTES PÚBLICAS DE CHILE
-        ↓
-NORMALIZACIÓN + PROVENANCE
-        ↓
-GEO / TIME / ENTITY MATCHING
-        ↓
-ANTEMANO GRAPH
-        ↓
-EVENT CANDIDATES
-        ↓
-IMPACTO SOBRE UNA OPERACIÓN REAL
+fuente oficial
+  → observación normalizada
+  → match geográfico / dependencia / vínculo explícito
+  → ANTEMANO Graph
+  → event candidate
+  → impacto sobre una operación real
 ```
 
----
+Una señal pública no es automáticamente un evento. Sin una dependencia verificable hacia una organización autorizada, permanece como evidencia externa.
 
-## Regla central
+## Fuentes operativas
 
-Una señal pública no se convierte automáticamente en un evento operacional.
+| Fuente | Señal | Acceso | Estado |
+| --- | --- | --- | --- |
+| CNE — Generación Bruta | generación mensual por tecnología y subsistema | abierto / datos.gob.cl | **LIVE** |
+| DGA — Alertas Fluviométricas | alertas Azul, Amarilla y Roja + lectura/umbral | abierto / ArcGIS MOP | **LIVE** |
+| MOP — Emergencias Viales | ruta, tránsito, restricción, gravedad y operatividad | abierto / ArcGIS MOP | **LIVE** |
+| MOP — Pasos Fronterizos | transitabilidad, calzada, clima, cadenas y restricciones | abierto / ArcGIS MOP | **LIVE** |
+| MOP — Emergencias de Infraestructura | degradación de carreteras, puertos, aeropuertos, APR, cauces y otras obras | abierto / ArcGIS MOP | **LIVE** |
 
-Debe existir una relación verificable entre la señal y uno o más nodos del grafo de una organización autorizada.
+### CNE — Generación Bruta
 
-```text
-señal externa
-    ↓
-match geográfico / dependencia / vínculo explícito
-    ↓
-propagación por relaciones autorizadas
-    ↓
-event candidate
-```
+Conector: `cl.cne.generacion-bruta`.
 
-Los datos ficticios no forman parte de este flujo.
+La ingesta toma el último período disponible y agrega las filas oficiales por `subsistema + clasificación + tecnología`, conservando período, número de plantas y cantidad de filas fuente.
 
----
+La primera ejecución productiva normalizó 1.115 filas oficiales de febrero de 2026 en 18 señales. Una segunda ejecución confirmó deduplicación determinística: 0 nuevas / 18 duplicadas.
 
-# Fuentes prioritarias
+### DGA — Alertas Fluviométricas
 
-## P0 — Dirección Meteorológica de Chile (DMC)
+Conector: `cl.dga.hydrometric`.
 
-Señales:
+El servicio oficial DGA/MOP actualiza la vista de alertas aproximadamente cada 15–60 minutos según estación. ANTEMANO une:
+
+- tabla de alertas/lecturas actuales;
+- catálogo georreferenciado de estaciones de la Red Hidrométrica Nacional.
+
+**Regla de calidad:** la vista DGA genera filas `sin alerta / valor 0` con timestamp de refresh para estaciones sin una alerta activa. Esas filas no son nuevas mediciones y se excluyen de la ingesta. El conector conserva únicamente `mod_indale > 0` (Azul/Amarilla/Roja).
+
+La prueba inicial detectó este comportamiento, eliminó 3.648 filas transitorias sin matches y conservó las alertas reales. Dos ejecuciones posteriores del parser v4 devolvieron 6 alertas actuales con 0 inserts nuevos / 6 duplicados.
+
+Para anticipación hidrológica previa a la alerta formal necesitaremos una fuente de telemetría de caudal estable distinta de esta vista de alertas; no se inferirá una serie temporal a partir de placeholders.
+
+### MOP — Emergencias Viales
+
+Conector: `cl.mop.vialidad.emergencias`.
+
+Normaliza:
+
+- fecha del evento;
+- ruta y kilómetros;
+- tránsito;
+- restricción;
+- operatividad;
+- gravedad;
+- geometría WGS84.
+
+Primera carga productiva: **918** observaciones. Segunda carga: **0 nuevas / 918 duplicadas**.
+
+### MOP — Pasos Fronterizos
+
+Conector: `cl.mop.vialidad.pasos-fronterizos`.
+
+Sólo ingiere registros con `ESTADOINFORME = 'Actual'` y conserva transitabilidad, estado de calzada, clima, cadenas, restricciones, habilitación y geografía.
+
+Primera carga productiva: **24** estados actuales. Segunda carga: **0 nuevas / 24 duplicadas**.
+
+### MOP — Emergencias de Infraestructura
+
+Conector: `cl.mop.emergencias-infraestructura`.
+
+Cubre infraestructura MOP afectada: vialidad, obras portuarias, aeroportuarias, agua potable rural, riego, cauces, aguas lluvias, estaciones DGA y edificación pública.
+
+El servidor ArcGIS 10.2 requiere lotes pequeños. ANTEMANO recupera por object IDs en lotes de 50 y no acepta truncaciones silenciosas.
+
+Carga productiva completa verificada: **4.569** observaciones. Segunda carga completa: **0 nuevas / 4.569 duplicadas**.
+
+## Fuentes implementadas que requieren credenciales
+
+### DMC Weather / WRF
+
+`cl.dmc.wrf`
 
 - temperatura;
 - precipitación;
 - humedad;
 - viento;
-- estaciones automáticas;
-- pronóstico WRF-DMC.
-
-Casos ANTEMANO:
-
-- demanda sensible al clima;
-- stockout;
-- riesgo de ruta;
-- estrés térmico de activos;
-- consumo energético;
-- trabajo exterior;
-- interacción con incendios y otras amenazas.
-
-**Estado:** conector implementado; requiere credenciales y validación continua del contrato real.
-
----
-
-## P0 — Observatorio Logístico / Ministerio de Transportes
-
-Señales potenciales:
-
-- carga transferida;
-- indicadores operacionales de puertos estatales;
-- recaladas;
-- pasos fronterizos;
-- red vial;
-- capacidad y aforos;
-- transporte carretero, marítimo, aéreo y ferroviario.
-
-Casos ANTEMANO:
-
-- retraso de proveedor;
-- congestión portuaria;
-- riesgo de llegada de materia prima;
-- tiempos de reposición;
-- presión de capacidad logística;
-- propagación puerto → insumo → planta → producto.
-
-**Estado:** conector raw implementado. Próximo requisito: tipar campos reales, timestamps, entidad portuaria/geográfica y semántica de cada señal. `logistics.dataset.row` no es suficiente para producción.
-
----
-
-## P0 — LeyChile / Biblioteca del Congreso Nacional
-
-Señales:
-
-- normas nuevas;
-- normas modificadas;
-- versiones;
-- relaciones entre normas;
-- texto y metadatos jurídicos.
-
-Casos ANTEMANO:
-
-- obligaciones regulatorias;
-- medioambiente;
-- laboral;
-- transporte;
-- alimentos y etiquetado;
-- seguridad industrial;
-- permisos y compliance.
-
-**Estado:** integración actual responde, pero el parser necesita corregirse contra el contrato vigente antes de considerarse saludable.
-
----
-
-## P0 — Dirección General de Aguas (DGA)
-
-Señales:
-
-- caudales;
-- niveles de ríos;
-- precipitación;
-- nieve;
-- embalses;
-- aguas subterráneas;
-- calidad y temperatura de agua;
-- boletines hidrológicos.
-
-Casos ANTEMANO:
-
-- seguridad hídrica;
-- restricciones de producción;
-- crecidas e inundaciones;
-- afectación de rutas y proveedores;
-- disponibilidad de recursos críticos.
-
-**Estado:** alto valor de producto, pero no debe activarse hasta verificar un canal programático estable y operable.
-
----
-
-## P1 — Banco Central de Chile / BDE
-
-Señales:
-
-- dólar observado;
-- UF;
-- IPC;
-- tasas;
-- comercio exterior;
-- otros indicadores macroeconómicos.
-
-Casos ANTEMANO:
-
-- exposición cambiaria;
-- presión de costos;
-- contratos indexados;
-- insumos importados;
-- contexto de demanda.
-
-**Estado:** conector implementado para USD/CLP y UF; requiere token y validación recurrente de series/estado.
-
----
-
-## P1 — Comisión Nacional de Energía / Energía Abierta
-
-Señales:
-
-- costos marginales;
-- generación;
-- capacidad;
-- energía embalsada;
-- combustibles;
-- consumo;
-- normativa del sector.
-
-Casos ANTEMANO:
-
-- presión de costos energéticos;
-- disponibilidad;
-- exposición a combustibles;
-- clima → energía → operación.
-
----
-
-## P1 — Coordinador Eléctrico Nacional
-
-Señales:
-
-- demanda real y proyectada;
-- generación;
-- costo marginal;
-- embalses;
-- stock de combustible;
-- limitaciones de transmisión;
-- pronósticos de corto y mediano plazo.
-
-Casos ANTEMANO:
-
-- stress del sistema;
-- continuidad operacional;
-- disponibilidad energética;
-- eventos meteorológicos con impacto eléctrico.
-
-Debe preferirse esta fuente cuando el caso requiere operación eléctrica de mayor frecuencia que series agregadas.
-
----
-
-## P1 — SENAPRED
-
-Señales:
-
-- alertas preventivas;
-- amarillas y rojas;
-- amenazas naturales y antrópicas;
-- escalamiento oficial.
-
-ANTEMANO puede utilizar SENAPRED como fuente de confirmación/escalamiento, sin asumir que toda señal previa debe esperar una alerta formal.
-
----
-
-## P1 — Centro Sismológico Nacional
-
-Señales:
-
-- actividad sísmica;
 - estaciones;
-- disponibilidad instrumental.
+- WRF.
 
-ANTEMANO no intenta predecir terremotos. Utiliza eventos observados para anticipar propagación operacional, inspecciones y continuidad posteriores.
+Requiere `DMC_USER` y `DMC_TOKEN`.
 
----
+### Observatorio Logístico / MTT
 
-## P1 — SERNAGEOMIN / RNVV
+`cl.mtt.observatorio-logistico`
 
-Señales:
+Conector implementado, pero la normalización actual sigue siendo demasiado genérica para producción. Requiere `OBSERVATORIO_LOGISTICO_API_KEY` y tipar explícitamente entidad, timestamp y métrica de cada datastream seleccionado.
 
-- alerta técnica volcánica;
-- reportes especiales;
-- cartografía de amenazas.
+### LeyChile / BCN
 
-Casos:
+`cl.bcn.leychile`
 
-- ceniza sobre rutas o instalaciones;
-- continuidad de proveedores;
-- exposición de activos;
-- interacción con viento DMC.
+La API vigente es `https://www.bcn.cl/leychile/api/v1` y requiere `LEYCHILE_API_KEY`. El endpoint legado `/leychile/servicio/3/` ya no debe utilizarse como API.
 
----
+### Banco Central / BDE
 
-# Fuentes especializadas
+`cl.bcch.bde`
 
-## INE
+Conector para USD/CLP y UF. Requiere `BCCH_BDE_TOKEN`.
 
-Útil para baselines y variables lentas: actividad industrial, comercio, inventarios, empleo, precios y transporte.
+## Próximo radar oficial
 
-## ChileCompra / Mercado Público
+Prioridad de investigación/implementación:
 
-Útil para señales de demanda pública, compras sectoriales, proveedores y market intelligence.
+1. **CONAF** — probabilidad de ignición, humedad de combustible, Botón Rojo e incendios activos;
+2. **Coordinador Eléctrico Nacional** — demanda, generación, transmisión, costos marginales, embalses y combustible;
+3. **SINCA / MMA** — calidad del aire horaria;
+4. **DGA** — embalses, decretos de escasez, restricciones y una fuente estable de telemetría para caudal previo a alerta;
+5. **CNE** — capacidad instalada, generación distribuida, combustibles y factor de emisión;
+6. **ODEPA** — precios/volúmenes agroalimentarios;
+7. **ChileCompra OCDS** — compras y demanda pública en tiempo real;
+8. **SMA / SNIFA + SEA** — fiscalización, sanciones, medidas provisionales y proyectos/pertinencias.
 
-## Datos.gob.cl
-
-Debe tratarse como **metacatálogo**, no como una fuente operacional única.
-
-Puede utilizarse para:
-
-1. descubrir nuevas fuentes públicas;
-2. detectar actualizaciones de datasets;
-3. incorporar recursos específicos cuando exista un contrato estable y valor operacional.
-
-El endpoint de discovery no debe sustituir un proceso de evaluación de calidad, freshness, propiedad y semántica.
-
----
-
-# Orden de activación
-
-## Country Signal Core
-
-1. corregir LeyChile;
-2. tipar Observatorio Logístico;
-3. configurar DMC;
-4. configurar Banco Central;
-5. persistir y monitorear ingestiones reales;
-6. incorporar DGA sólo con canal estable;
-7. agregar Coordinador Eléctrico/CNE según operación.
-
-El objetivo no es acumular fuentes. Es conseguir señales que puedan relacionarse con decisiones reales.
-
----
-
-# Contrato canónico
+## Contrato canónico
 
 ```ts
 interface ExternalObservation {
@@ -324,82 +158,33 @@ interface ExternalObservation {
 
 Reglas:
 
-- nunca sobrescribir evidencia original;
-- separar `observedAt`, `publishedAt` e `ingestedAt`;
-- conservar geografía y vigencia temporal;
-- registrar calidad provisional/validada;
-- versionar parsers;
-- detectar cambios de schema;
-- sanear credenciales de URLs/evidencia;
-- no convertir una observación externa en hecho canónico del cliente.
+- evidencia original inmutable;
+- `observedAt`, `publishedAt` e `ingestedAt` separados;
+- geografía y vigencia temporal conservadas;
+- parser versionado;
+- credenciales fuera de evidence URLs;
+- deduplicación determinística;
+- ninguna observación externa se convierte por sí sola en hecho de un cliente;
+- una carga parcial o truncada se rechaza explícitamente.
 
----
-
-# Matching contra ANTEMANO Graph
-
-## Geográfico
-
-```text
-señal → ubicación / comuna / región
-                ↓
-        nodos operacionales
-```
-
-## Dependencias
-
-```text
-puerto → embarque/material → planta → producto → distribución
-```
-
-## Semántico
-
-```text
-norma → materia regulada → procesos / permisos / productos relacionados
-```
-
-Los modelos generativos pueden ayudar a clasificar información no estructurada, pero cada vínculo operacional importante debe quedar trazable y revisable.
-
----
-
-# Persistencia y tenancy
-
-Las observaciones externas son evidencia compartible sólo cuando representan hechos públicos idénticos para todas las organizaciones.
-
-La relevancia hacia cada cliente se almacena separadamente:
+## Matching y tenancy
 
 ```text
 external_observation
       ↓
 observation_match (organization_id)
       ↓
+operational node
+      ↓
+propagación por edges autorizados
+      ↓
 event_candidate (organization_id)
 ```
 
-Esto evita duplicar señales país y, al mismo tiempo, impide que una inferencia específica de una organización se convierta en estado global.
+Las observaciones país pueden ser globales cuando representan el mismo hecho público para todas las organizaciones. La relevancia, propagación, impacto y decisión son siempre tenant-specific.
 
-Las FK/constraints deben garantizar que nodos, edges, matches y eventos pertenezcan a la organización declarada.
+## Regla de producto
 
----
+La Capa País no se mide por cantidad de fuentes. Se mide por cuánto tiempo adicional entrega una señal oficial antes de que una dependencia operacional real sea impactada.
 
-# Freshness y salud
-
-Cada fuente declara:
-
-- estado de conector;
-- última ejecución;
-- última observación;
-- freshness esperada;
-- latencia;
-- parser/version;
-- error actual;
-- número de observaciones aceptadas/duplicadas.
-
-Una API respondiendo `200` no significa que la fuente sea saludable si el schema cambió o los datos dejaron de ser frescos.
-
----
-
-# Regla de producto
-
-La Capa País sólo demuestra valor cuando una señal oficial puede recorrer una dependencia real y aumentar el tiempo disponible para decidir.
-
-No se utilizan organizaciones ficticias, escenarios simulados ni datos sintéticos para completar el Command Center. Los fixtures de prueba permanecen aislados en la suite automatizada.
+No existen organizaciones ficticias, escenarios simulados ni datos sintéticos en el Command Center. Los fixtures permanecen aislados en tests.
