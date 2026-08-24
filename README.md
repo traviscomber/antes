@@ -4,11 +4,21 @@
 
 **ANTEMANO** es la plataforma de **inteligencia anticipatoria** de N3uralia para operaciones complejas.
 
-Conecta señales internas y externas, detecta eventos emergentes, estima cuándo pueden generar impacto y entrega contexto para decidir mientras todavía existe tiempo para actuar.
+Conecta señales internas y externas, detecta eventos emergentes, estima su ventana de impacto y entrega contexto para decidir mientras todavía existe tiempo para actuar.
 
 ANTEMANO no reemplaza ERP, MES, SCADA, WMS, TMS, CRM ni herramientas de BI. Se construye sobre ellos para transformar datos dispersos en **anticipación operacional**.
 
-**Dominio canónico:** https://antemano.app
+**Dominio canónico:** https://www.antemano.app
+
+---
+
+## Principio de producto
+
+ANTEMANO no se presenta como piloto ni como demo.
+
+El producto se implementa directamente sobre una operación real, con alcance progresivo, fuentes autorizadas y controles de seguridad explícitos. Cuando una capacidad todavía no tiene evidencia suficiente, el estado correcto es **no afirmar**.
+
+Los datos ficticios no forman parte de superficies de producto. Los fixtures sintéticos pueden existir únicamente dentro de tests automatizados y nunca deben llegar a UI, APIs públicas, staging comercial o producción.
 
 ---
 
@@ -25,22 +35,18 @@ ANTEMANO busca responder seis preguntas antes de que un evento llegue a la opera
 5. **¿Cuál es el impacto potencial?**
 6. **¿Qué opciones existen para actuar ahora?**
 
-La unidad de valor de ANTEMANO es simple:
+La unidad de valor es:
 
-> **Tiempo ganado antes del impacto.**
+> **Tiempo útil ganado antes del impacto.**
 
 ---
 
 ## De observar a anticipar
 
-Los sistemas tradicionales responden muy bien a otras preguntas:
-
 - **ERP / sistemas transaccionales:** qué se registró.
 - **BI / reporting:** qué pasó.
 - **Monitoring / control towers:** qué está pasando.
 - **ANTEMANO:** qué está empezando a pasar, qué puede ocurrir después y qué decisión todavía puede tomarse.
-
-El flujo conceptual es:
 
 ```text
 SEÑALES → EVENTOS → PREDICCIÓN → IMPACTO → DECISIÓN → ACCIÓN → APRENDIZAJE
@@ -48,91 +54,35 @@ SEÑALES → EVENTOS → PREDICCIÓN → IMPACTO → DECISIÓN → ACCIÓN → A
 
 ---
 
-## Arquitectura conceptual
+## Capacidades
 
-ANTEMANO se organiza en seis capacidades principales.
+### ANTEMANO Signals
 
-### 1. ANTEMANO Signals
+Conecta sistemas internos y fuentes externas relevantes: operación, inventario, mantenimiento, ventas, logística, proveedores, IoT, clima, puertos, regulación, economía, energía y otras señales verificables.
 
-Conecta información operacional y señales externas relevantes.
+### ANTEMANO Graph
 
-Fuentes posibles:
-
-- ERP / SAP
-- MES / SCADA
-- WMS / TMS
-- CRM
-- mantenimiento
-- inventarios
-- ventas y demanda
-- IoT y telemetría
-- proveedores
-- APIs y documentos
-- clima
-- tráfico
-- puertos y transporte
-- commodities
-- regulación
-- noticias y eventos públicos
-- riesgos externos
-
-### 2. ANTEMANO Graph
-
-Modela relaciones y dependencias de la operación.
-
-Ejemplo:
+Modela relaciones y dependencias de la operación:
 
 ```text
-Proveedor
-   ↓
-Insumo
-   ↓
-Planta
-   ↓
-Línea
-   ↓
-Producto
-   ↓
-Inventario
-   ↓
-Centro de distribución
-   ↓
-Transporte
-   ↓
-Cliente
+Proveedor → Insumo → Planta → Línea → Producto → Inventario → CD → Transporte → Cliente
 ```
 
-El objetivo no es sólo conocer datos, sino entender **qué depende de qué**.
+El valor no está sólo en conocer datos, sino en entender **qué depende de qué**.
 
-### 3. ANTEMANO Predict
+### ANTEMANO Predict
 
-Utiliza el modelo adecuado para cada problema: series de tiempo, detección de anomalías, machine learning, optimización, modelos causales, visión computacional o modelos generativos cuando corresponda.
+Utiliza el método adecuado para cada problema: reglas determinísticas, series de tiempo, anomalías, forecasting, optimización, modelos causales, visión computacional o modelos generativos cuando corresponda.
 
-ANTEMANO no fuerza IA generativa sobre problemas que pueden resolverse mejor con métodos determinísticos o estadísticos.
+### ANTEMANO Impact
 
-### 4. ANTEMANO Impact
+Convierte una señal técnica en contexto operacional y de negocio. Cuando la evidencia lo permite, expresa ventana temporal, nodos afectados, dependencias, magnitud operacional e impacto económico trazable.
 
-Convierte una señal técnica en contexto operacional y de negocio.
+### ANTEMANO Decide
 
-Un evento debe poder expresar, cuando la evidencia lo permite:
+Permite comparar cursos de acción antes de intervenir. Una recomendación nunca se confunde con una decisión humana.
 
-- probabilidad;
-- tiempo estimado al impacto;
-- activos, procesos o clientes afectados;
-- dependencias involucradas;
-- impacto operacional potencial;
-- impacto económico potencial;
-- nivel de confianza y evidencia disponible.
-
-### 5. ANTEMANO Decide
-
-Permite comparar cursos de acción antes de intervenir.
-
-El objetivo no es entregar una alerta más, sino ayudar a responder:
-
-> **¿Qué podemos hacer mientras todavía hay tiempo?**
-
-### 6. ANTEMANO Memory
+### ANTEMANO Memory
 
 Registra el ciclo completo:
 
@@ -140,235 +90,120 @@ Registra el ciclo completo:
 EVENTO → PREDICCIÓN → RECOMENDACIÓN → DECISIÓN → RESULTADO
 ```
 
-Con el tiempo, esta memoria permite aprender no sólo de los datos de la operación, sino también de cómo la organización responde ante distintos eventos.
+La memoria permite evaluar precisión, anticipación y calidad de las decisiones con evidencia posterior.
 
 ---
 
-## La experiencia de producto
+## Experiencia de producto
 
-ANTEMANO no está pensado como otro dashboard lleno de indicadores.
+ANTEMANO no debe convertirse en otro dashboard lleno de indicadores.
 
-La pantalla principal debe responder primero:
+La pantalla principal responde primero:
 
 > **¿Qué necesita atención ahora?**
 
-Ejemplo conceptual:
+Superficies principales:
 
-```text
-EVENTO 0172 · SUMINISTRO
+1. **Ahora** — eventos que requieren atención o seguimiento.
+2. **Evento** — predicción, evidencia, impacto y ventana temporal.
+3. **Dependencias** — ruta operacional afectada.
+4. **Simular** — alternativas, restricciones y supuestos.
+5. **Memoria** — predicciones, decisiones y outcomes históricos.
+6. **Fuentes** — salud, freshness, ingestión y provenance.
 
-Probable retraso crítico de material
-
-Probabilidad        78%
-Impacto estimado    6d 14h
-Operaciones         2 plantas
-Productos           7 SKU
-
-Dependencia detectada
-Proveedor → Puerto → Inventario → Producción
-
-Acción sugerida
-Revisar adelanto de orden y simular escenarios alternativos.
-
-[ SIMULAR ]   [ ASIGNAR ]   [ DESCARTAR ]
-```
-
-Los casos y cifras de esta documentación son ilustrativos. ANTEMANO debe operar con datos reales, trazables y verificables de cada implementación.
+Si no existen eventos verificables, ANTEMANO muestra un estado vacío honesto.
 
 ---
 
-## Casos de uso
+## Implementación
 
-ANTEMANO es horizontal. La lógica de anticipación puede adaptarse a distintas industrias.
+ANTEMANO se activa por capacidades, no por una demo temporal.
 
-### Industria y manufactura
+El orden de implementación es:
 
-- anomalías de proceso;
-- riesgo de detención;
-- mantenimiento anticipado;
-- calidad;
-- capacidad;
-- consumo de recursos.
+1. conectar fuentes reales autorizadas;
+2. construir el grafo operacional real;
+3. validar calidad, freshness y trazabilidad;
+4. activar detectores en **shadow mode**;
+5. medir anticipación y falsos positivos;
+6. elevar eventos accionables al Command Center;
+7. incorporar impacto, escenarios y memoria;
+8. automatizar sólo acciones que tengan controles y evidencia suficientes.
 
-### Minería
-
-- continuidad operacional;
-- mantenimiento;
-- disponibilidad de equipos;
-- insumos críticos;
-- logística;
-- seguridad operacional.
-
-### Logística y distribución
-
-- ETA y retrasos;
-- pedidos con riesgo;
-- retornos;
-- congestión;
-- capacidad;
-- rutas y ventanas de atención.
-
-### Retail y consumo masivo
-
-- quiebres de stock;
-- cambios de demanda;
-- promociones;
-- inventario;
-- distribución;
-- eventos externos que alteran consumo.
-
-### Utilities y operaciones críticas
-
-- capacidad;
-- energía;
-- agua;
-- disponibilidad;
-- continuidad;
-- eventos externos y regulatorios.
+**Shadow mode** es un estado de seguridad operacional: el sistema observa y evalúa sin ejecutar acciones críticas. No es un modo demo.
 
 ---
 
-## ANTEMANO 90
-
-**ANTEMANO 90** es el formato inicial de implementación del producto.
-
-Objetivo:
-
-> **Descubrir, en 90 días, con cuánto tiempo de anticipación puede ver una operación y si esa anticipación produce valor medible.**
-
-### Alcance inicial
-
-- una operación, unidad o flujo acotado;
-- 2–3 familias de eventos críticos;
-- integración con fuentes prioritarias;
-- baseline histórico;
-- primeros modelos predictivos;
-- operación en **shadow mode**;
-- Command Center de anticipación;
-- validación de precisión, anticipación e impacto.
-
-### Fases
-
-#### Días 1–15 · Entender
-
-- mapear la operación;
-- identificar decisiones críticas;
-- priorizar señales y fuentes;
-- definir eventos relevantes y métricas.
-
-#### Días 15–30 · Conectar
-
-- construir el modelo operacional inicial;
-- conectar fuentes prioritarias;
-- preparar baseline histórico.
-
-#### Días 30–60 · Predecir
-
-- desarrollar los primeros motores de detección y predicción;
-- medir precisión;
-- calcular time-to-impact.
-
-#### Días 60–75 · Observar
-
-- operar en shadow mode;
-- comparar predicción contra resultado real;
-- reducir ruido y falsos positivos.
-
-#### Días 75–90 · Validar
-
-- Command Center funcional;
-- evaluación de eventos accionables;
-- estimación del valor económico observado;
-- recomendación de escalamiento o detención.
-
----
-
-## Métricas del producto
+## Métricas
 
 ANTEMANO prioriza métricas que demuestren valor operacional real:
 
-- **horas de anticipación generadas**;
+- **Actionable Lead Time**;
 - eventos detectados antes del impacto;
-- precisión y falsos positivos;
-- porcentaje de eventos accionables;
-- time-to-impact;
-- impacto operacional expuesto;
-- impacto potencialmente mitigable;
+- Event Precision;
+- Actionability Rate;
+- falsos positivos;
 - decisiones tomadas dentro de la ventana útil;
-- resultados posteriores a la decisión.
+- impacto estimado vs resultado observado;
+- source freshness e ingestion lag;
+- cobertura de outcomes reconciliados.
 
 No se considera éxito que un modelo simplemente produzca predicciones. Debe demostrar que entrega **tiempo útil y contexto suficiente para decidir**.
 
 ---
 
-## Principios de producto
+## Principios
 
 ### Evidencia antes que hype
-
 Cada predicción importante debe ser trazable a señales, datos y modelos verificables.
 
-### Humano en decisiones críticas
+### Datos reales en producto
+No se utilizan datos ficticios para simular capacidad frente a usuarios. Los datos de prueba quedan aislados en tests.
 
-ANTEMANO puede recomendar, priorizar y simular. La automatización de acciones críticas requiere controles, permisos y validación explícita.
+### Humano en decisiones críticas
+ANTEMANO puede recomendar, priorizar y simular. Las acciones críticas requieren controles, permisos y validación explícita.
 
 ### Shadow mode primero
-
-Los nuevos motores deben demostrar valor antes de influir directamente sobre sistemas operacionales.
+Los nuevos motores deben demostrar calidad antes de influir directamente sobre sistemas operacionales.
 
 ### Modelo adecuado para cada problema
-
-No todo requiere un LLM. ANTEMANO combina modelos estadísticos, machine learning, optimización, reglas, grafos y modelos generativos según el caso.
+No todo requiere un LLM. ANTEMANO combina estadística, reglas, ML, optimización, grafos y modelos generativos según el caso.
 
 ### Integrar antes que reemplazar
-
-ANTEMANO debe aprovechar la infraestructura existente del cliente siempre que sea razonable.
+ANTEMANO aprovecha la infraestructura existente del cliente siempre que sea razonable.
 
 ### Aprender de resultados
-
-Una predicción sin seguimiento de su resultado pierde gran parte de su valor. El ciclo debe cerrarse.
+Una predicción sin outcome reconciliado pierde gran parte de su valor.
 
 ### Seguridad por diseño
-
-Datos, permisos, modelos, trazabilidad y acciones deben diseñarse bajo mínimos privilegios, segregación de responsabilidades y auditoría.
+Datos, permisos, modelos, trazabilidad y acciones se diseñan con mínimo privilegio, aislamiento por organización y auditoría.
 
 ---
 
 ## Desarrollo
 
-### Vercel
+La aplicación usa Next.js, TypeScript estricto y PostgreSQL. La persistencia actual utiliza `@neondatabase/serverless` detrás de contratos de dominio.
 
-El repositorio fija explícitamente el framework `nextjs` y deja `outputDirectory` en autodetección mediante `vercel.json`. Esto evita que una configuración de proyecto heredada intente publicar una carpeta estática `public` en lugar del output nativo de Next.js.
+Variables sensibles como `DATABASE_URL` y tokens de fuentes oficiales son server-side y nunca deben guardarse en Git.
 
-### Postgres / Neon
-
-La persistencia usa `@neondatabase/serverless` detrás del contrato `CountrySignalStore`. La aplicación requiere una variable server-side:
-
-```text
-DATABASE_URL
-```
-
-No se deben guardar connection strings, passwords ni API keys en Git. Para previews, `DATABASE_URL` debe apuntar a una rama de desarrollo/preview; producción debe usar una rama y credenciales separadas.
-
-La vista `/app/sources` funciona incluso sin base configurada: muestra explícitamente `UNCONFIGURED` en lugar de simular conectividad.
+La vista `/app/sources` debe degradar honestamente cuando una integración no está configurada o una fuente está indisponible.
 
 ---
 
-## Estado
+## Estado actual
 
-**Etapa actual:** definición y construcción de MVP.
+Prioridades de construcción:
 
-Prioridades iniciales:
-
-1. modelo de dominio y Event Graph;
-2. esquema de eventos y señales;
-3. motor de time-to-impact;
-4. modelo de impacto;
-5. Command Center;
-6. simulación de decisiones;
-7. memoria de eventos, decisiones y resultados;
-8. primera demo industrial;
-9. especificación operacional de ANTEMANO 90;
-10. evaluación con datos reales en shadow mode.
+1. hardening de seguridad, tenancy y CI;
+2. persistencia Postgres productizable;
+3. fuentes oficiales reales de Chile;
+4. grafo operacional real por organización;
+5. primer Event Candidate persistido con evidencia real;
+6. motor de time-to-impact;
+7. Command Center basado en eventos reales;
+8. Impact Engine;
+9. Decision Loop;
+10. ANTEMANO Memory y evaluación continua.
 
 ---
 
@@ -380,9 +215,7 @@ ANTEMANO busca que una organización evolucione desde una operación reactiva ha
 OBSERVAR → ANTICIPAR → DECIDIR → ACTUAR → APRENDER
 ```
 
-No se trata de predecir todo.
-
-Se trata de identificar **de antemano** los eventos que realmente importan y crear suficiente tiempo para cambiar su resultado.
+No se trata de predecir todo. Se trata de identificar **de antemano** los eventos que realmente importan y crear suficiente tiempo para cambiar su resultado.
 
 ---
 
@@ -390,9 +223,7 @@ Se trata de identificar **de antemano** los eventos que realmente importan y cre
 
 ANTEMANO es un producto de **N3uralia**, fábrica de software e inteligencia artificial enfocada en operaciones reales y sistemas de alta complejidad.
 
-N3uralia diseña e implementa software, automatización e inteligencia operacional adaptados a los sistemas y procesos de cada organización.
-
-**Producto:** https://antemano.app  
+**Producto:** https://www.antemano.app  
 **N3uralia:** https://n3uralia.com
 
 ---
@@ -401,4 +232,4 @@ N3uralia diseña e implementa software, automatización e inteligencia operacion
 
 Copyright © 2026 N3uralia. Todos los derechos reservados.
 
-Este repositorio puede exponer documentación pública y componentes demostrativos del producto. La lógica propietaria, modelos específicos, heurísticas, configuraciones, prompts, scoring, conectores privados y conocimiento operacional de clientes no forman parte de la documentación pública salvo indicación expresa.
+La lógica propietaria, modelos específicos, heurísticas, configuraciones, prompts, scoring, conectores privados y conocimiento operacional de clientes no deben exponerse públicamente salvo decisión expresa.
