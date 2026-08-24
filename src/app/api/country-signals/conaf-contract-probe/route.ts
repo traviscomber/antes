@@ -45,7 +45,7 @@ async function inspectActiveFires() {
   );
   const modelId = readModelId(models);
   const candidates = extractVisualQueries(models)
-    .filter((candidate) => candidate.sectionName === "WEB_SITUACION_ACTUAL_P1")
+    .filter((candidate) => candidate.sectionDisplayName === "Situación Actual")
     .sort((a, b) => b.score - a.score);
   const selected = candidates[0];
 
@@ -79,7 +79,7 @@ async function inspectActiveFires() {
       title: candidate.title,
       score: candidate.score,
       fields: candidate.fields,
-      query: candidate.query,
+      query: candidate.score >= 6 ? candidate.query : undefined,
     })),
     selectedQuery: selected
       ? {
@@ -100,11 +100,28 @@ async function inspectRedButton() {
       4,
       "https://www.arcgis.com",
     );
+    const data = await fetchPublicJson(
+      `https://www.arcgis.com/sharing/rest/content/items/${STORYMAP_ID}/data?f=json`,
+    );
+    const strings = collectStrings(data);
+    const urls = [...new Set(strings.filter((value) => /^https?:\/\//i.test(value)))];
+    const itemIds = [...new Set(strings.flatMap((value) =>
+      [...value.matchAll(/\b[0-9a-f]{32}\b/gi)].map((match) => match[0].toLowerCase()),
+    ))].filter((id) => id !== STORYMAP_ID);
+    const relevantText = strings
+      .filter((value) => /bot[oó]n|rojo|ignici[oó]n|viento|pron[oó]stico|dashboard|mapa|comuna/i.test(value))
+      .map((value) => value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim())
+      .filter(Boolean)
+      .slice(0, 80);
+
     return {
       storyMapId: STORYMAP_ID,
       portalUrl: references.portalUrl,
       items: references.items,
       serviceUrls: references.serviceUrls,
+      discoveredItemIds: itemIds.slice(0, 80),
+      urls: urls.filter((url) => /arcgis|geprif|conaf|powerbi/i.test(url)).slice(0, 80),
+      relevantText,
     };
   } catch (error) {
     return {
@@ -214,7 +231,7 @@ function summarizeQueryResponse(value: unknown) {
     keys: Object.keys(value).slice(0, 30),
     bytes: json.length,
     error: value.error,
-    sample: json.slice(0, 12000),
+    sample: json.slice(0, 20000),
   };
 }
 
@@ -243,6 +260,31 @@ async function fetchPowerBiJson(
     throw new Error(`Power BI ${method} ${new URL(url).pathname} failed with HTTP ${response.status}: ${payload.slice(0, 500)}`);
   }
   return JSON.parse(payload) as unknown;
+}
+
+async function fetchPublicJson(url: string): Promise<unknown> {
+  const response = await fetch(url, {
+    headers: { Accept: "application/json", "User-Agent": USER_AGENT },
+    cache: "no-store",
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!response.ok) throw new Error(`Public JSON request failed with HTTP ${response.status}.`);
+  return response.json() as Promise<unknown>;
+}
+
+function collectStrings(value: unknown, output: string[] = []): string[] {
+  if (typeof value === "string") {
+    output.push(value);
+    return output;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectStrings(item, output);
+    return output;
+  }
+  if (isObject(value)) {
+    for (const item of Object.values(value)) collectStrings(item, output);
+  }
+  return output;
 }
 
 function readModelId(models: unknown): number | undefined {
