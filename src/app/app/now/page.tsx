@@ -5,6 +5,7 @@ import {
   getNowSnapshot,
   type NowSignal,
   type NowSnapshot,
+  type PersonalAlert,
   type PersonalSignal,
 } from "@/lib/now/read-model";
 
@@ -53,10 +54,10 @@ export default async function NowPage() {
           <p className="lede">{personalStatus(snapshot)}</p>
         </div>
 
-        <div className="heroMetrics" aria-label="Señales personalizadas">
+        <div className="heroMetrics" aria-label="Estado personal">
           <div>
             <strong>{snapshot.personalAttentionCount}</strong>
-            <span>requieren atención</span>
+            <span>alertas activas</span>
           </div>
           <div>
             <strong>{snapshot.personalSignals.length}</strong>
@@ -72,14 +73,63 @@ export default async function NowPage() {
       <section className="sectionBlock">
         <div className="sectionHeading">
           <div>
-            <p className="sectionLabel">PARA TI</p>
-            <h3>{location ? `Señales relevantes para ${location}` : "Configura tu ubicación"}</h3>
+            <p className="sectionLabel">ALERTAS PARA TI</p>
+            <h3>{snapshot.personalAlerts.length > 0 ? "Requieren atención" : "Sin alertas activas"}</h3>
           </div>
-          <p>
-            {location
-              ? "Se ordenan por coincidencia de comuna, cercanía geográfica y región. La evidencia sigue siendo la observación oficial original."
-              : "Indica dónde vives para priorizar señales reales cercanas a ti."}
-          </p>
+          <p>Se muestran sólo cuando una señal vigente cumple una regla personal explícita. Registros relacionados se consolidan para evitar ruido.</p>
+        </div>
+
+        <div className="sourceGrid">
+          {snapshot.personalAlerts.length > 0 ? snapshot.personalAlerts.map((alert) => (
+            <article className="sourceCard personalSignalCard" key={alert.id}>
+              <div className="sourceCardTop">
+                <div>
+                  <p className="sourceAuthority">{alert.sourceName}</p>
+                  <h4>{personalAlertLabel(alert)}</h4>
+                </div>
+                <span className={`statusBadge ${alertLevelClass(alert.level)}`}>
+                  {alertLevelLabel(alert.level)}
+                </span>
+              </div>
+
+              <p className="sourceDescription">{alert.reason}</p>
+
+              <dl className="sourceMeta">
+                <div><dt>Vigente</dt><dd>{formatChileDate(alert.lastSeenAt)}</dd></div>
+                <div><dt>Cercanía</dt><dd>{alertDistance(alert)}</dd></div>
+                <div><dt>Evidencia</dt><dd>{numberFormat.format(alert.itemCount)} {alert.itemCount === 1 ? "registro" : "registros"}</dd></div>
+              </dl>
+
+              <p className="sourceMessage">
+                {alert.criticalCount > 0 ? `${alert.criticalCount} crítico${alert.criticalCount === 1 ? "" : "s"} · ` : ""}
+                {alert.sourceId} · evidencia oficial persistida
+              </p>
+            </article>
+          )) : (
+            <article className="sourceCard personalSignalCard">
+              <div className="sourceCardTop">
+                <div>
+                  <p className="sourceAuthority">PERFIL PERSONAL</p>
+                  <h4>Sin alertas activas</h4>
+                </div>
+                <span className="statusBadge healthy">OK</span>
+              </div>
+              <p className="sourceDescription">
+                No hay evidencia vigente que cumpla una regla de alerta para tu perfil. Las señales relacionadas siguen visibles abajo como contexto.
+              </p>
+              <p className="sourceMessage"><Link href="/app/profile">Editar perfil</Link></p>
+            </article>
+          )}
+        </div>
+      </section>
+
+      <section className="sectionBlock">
+        <div className="sectionHeading">
+          <div>
+            <p className="sectionLabel">SEÑALES RELEVANTES</p>
+            <h3>{location ? `Contexto para ${location}` : "Configura tu ubicación"}</h3>
+          </div>
+          <p>Coincidencia por comuna, cercanía o región. Una señal relevante no es necesariamente una alerta.</p>
         </div>
 
         <div className="sourceGrid">
@@ -90,9 +140,7 @@ export default async function NowPage() {
                   <p className="sourceAuthority">{signal.sourceName}</p>
                   <h4>{signalLabel(signal.signalType)}</h4>
                 </div>
-                <span className={`statusBadge ${signal.attention ? "unavailable" : severityClass(signal.severity)}`}>
-                  {signal.attention ? "ATENCIÓN" : signal.relevance.toUpperCase()}
-                </span>
+                <span className="statusBadge neutral">{personalRelevanceLabel(signal)}</span>
               </div>
 
               <p className="sourceDescription">
@@ -103,28 +151,26 @@ export default async function NowPage() {
               </p>
 
               <dl className="sourceMeta">
-                <div><dt>Actualizado</dt><dd>{formatChileDate(signal.observedAt)}</dd></div>
+                <div><dt>Observado</dt><dd>{formatChileDate(signal.observedAt)}</dd></div>
                 <div><dt>Ubicación</dt><dd>{signalLocation(signal)}</dd></div>
                 <div><dt>Relevancia</dt><dd>{personalReason(signal)}</dd></div>
               </dl>
 
-              <p className="sourceMessage">
-                <span className="personalSignalReason">{personalReasonDetail(signal)}</span> · calidad {signal.qualityState}
-              </p>
+              <p className="sourceMessage">{personalReasonDetail(signal)} · calidad {signal.qualityState}</p>
             </article>
           )) : (
             <article className="sourceCard personalSignalCard">
               <div className="sourceCardTop">
                 <div>
                   <p className="sourceAuthority">PERFIL PERSONAL</p>
-                  <h4>{location ? "Sin señales geográficas coincidentes" : "Falta tu ubicación"}</h4>
+                  <h4>{location ? "Sin señales coincidentes" : "Falta tu ubicación"}</h4>
                 </div>
                 <span className="statusBadge neutral">PERFIL</span>
               </div>
               <p className="sourceDescription">
                 {location
                   ? "No hay observaciones persistidas que coincidan actualmente con tu comuna, región o un radio de 80 km."
-                  : "Configura región y comuna para empezar a filtrar la Capa País."}
+                  : "Configura región y comuna para filtrar la Capa País."}
               </p>
               <p className="sourceMessage"><Link href="/app/profile">Editar perfil</Link></p>
             </article>
@@ -163,9 +209,7 @@ export default async function NowPage() {
                 </span>
               </div>
 
-              <p className="sourceDescription">
-                {signal.value ?? "Observación oficial sin valor escalar"}
-              </p>
+              <p className="sourceDescription">{signal.value ?? "Observación oficial sin valor escalar"}</p>
 
               <dl className="sourceMeta">
                 <div><dt>Actualizado</dt><dd>{formatChileDate(signal.observedAt)}</dd></div>
@@ -211,20 +255,13 @@ export default async function NowPage() {
                   {event.state}
                 </span>
               </div>
-
-              <p className="sourceDescription">
-                Señal: {signalLabel(event.signalType)}. Observada {formatChileDate(event.observedAt)}.
-              </p>
-
+              <p className="sourceDescription">Señal: {signalLabel(event.signalType)}. Observada {formatChileDate(event.observedAt)}.</p>
               <dl className="sourceMeta">
                 <div><dt>Nodos directos</dt><dd>{event.directNodes}</dd></div>
                 <div><dt>Nodos afectados</dt><dd>{event.affectedNodes}</dd></div>
                 <div><dt>Fuente</dt><dd>{event.sourceId}</dd></div>
               </dl>
-
-              <p className="sourceMessage">
-                {event.rationale[0] ?? "Evento persistido sin racional adicional."}
-              </p>
+              <p className="sourceMessage">{event.rationale[0] ?? "Evento persistido sin racional adicional."}</p>
             </article>
           )) : (
             <article className="sourceCard">
@@ -235,9 +272,7 @@ export default async function NowPage() {
                 </div>
                 <span className="statusBadge neutral">0</span>
               </div>
-              <p className="sourceDescription">
-                Las alertas personales y el grafo empresarial son capas distintas. No inventamos plantas, proveedores ni dependencias para producir eventos de negocio.
-              </p>
+              <p className="sourceDescription">Las alertas personales y el grafo empresarial son capas distintas. No se inventan dependencias para generar eventos de negocio.</p>
               <p className="sourceMessage"><Link href="/app/graph">Ver grafo operacional</Link></p>
             </article>
           )}
@@ -250,7 +285,7 @@ export default async function NowPage() {
             <p className="sectionLabel">SISTEMA</p>
             <h3>Estado de datos</h3>
           </div>
-          <p>Conteos leídos en tiempo real desde el Postgres conectado a producción.</p>
+          <p>Conteos leídos en tiempo real desde el Postgres de producción.</p>
         </div>
 
         <div className="sourceGrid">
@@ -288,22 +323,19 @@ export default async function NowPage() {
 
 function personalHeadline(snapshot: NowSnapshot): string {
   if (!snapshot.profile?.homeCommune && !snapshot.profile?.homeRegion) return "Configura tu contexto para saber qué te afecta.";
+  const place = snapshot.profile.homeCommune ?? snapshot.profile.homeRegion ?? "tu ubicación";
   if (snapshot.personalAttentionCount > 0) {
-    return `${snapshot.personalAttentionCount} ${snapshot.personalAttentionCount === 1 ? "señal requiere" : "señales requieren"} tu atención.`;
+    return `${snapshot.personalAttentionCount} ${snapshot.personalAttentionCount === 1 ? "alerta activa" : "alertas activas"} para ${place}.`;
   }
-  if (snapshot.personalSignals.length > 0) {
-    return `${snapshot.personalSignals.length} ${snapshot.personalSignals.length === 1 ? "señal es relevante" : "señales son relevantes"} para ti.`;
-  }
-  return "Sin señales cercanas que requieran atención.";
+  return `Sin alertas activas para ${place}.`;
 }
 
 function personalStatus(snapshot: NowSnapshot): string {
   const profile = snapshot.profile;
   if (!profile?.homeCommune && !profile?.homeRegion) {
-    return "Agrega tu comuna y región. ANTEMANO cruzará esa ubicación con la Capa País real, sin datos de ejemplo.";
+    return "Agrega tu comuna y región para cruzar tu perfil con la Capa País real.";
   }
-  const place = profile.homeCommune ?? profile.homeRegion ?? "tu ubicación";
-  return `Perfil ubicado en ${place}. Se comparan observaciones oficiales por comuna, región y hasta 80 km cuando existe georreferencia.`;
+  return `${snapshot.personalSignals.length} señales oficiales son relevantes para tu contexto. Sólo se elevan a alerta cuando cumplen una regla vigente de impacto personal.`;
 }
 
 function profileSummary(snapshot: NowSnapshot): string {
@@ -319,9 +351,9 @@ function profileDetail(snapshot: NowSnapshot): string {
   const profile = snapshot.profile;
   if (!profile) return "Configura ubicación, vehículo, combustible y capacidad de estanque.";
   if (profile.fuelType && profile.tankCapacityLiters) {
-    return `Cuando exista precio CNE regional para ${fuelTypeLabel(profile.fuelType)}, ANTEMANO calculará cuánto cuesta llenar ${profile.tankCapacityLiters} litros y cómo cambia ese costo.`;
+    return `Cuando exista precio CNE regional para ${fuelTypeLabel(profile.fuelType)}, ANTEMANO calculará cuánto cuesta llenar ${profile.tankCapacityLiters} litros.`;
   }
-  return "Completa auto, tipo de combustible y litros de estanque para transformar señales de precio en impacto personal.";
+  return "Completa auto, tipo de combustible y litros de estanque para convertir señales de precio en impacto personal.";
 }
 
 function countryStatus(snapshot: NowSnapshot): string {
@@ -340,8 +372,40 @@ function operationalTitle(snapshot: NowSnapshot): string {
 function operationalDetail(snapshot: NowSnapshot): string {
   if (snapshot.escalatedEvents > 0) return "Hay exposición persistida y escalada. Revisa su evidencia y ruta de dependencia.";
   if (snapshot.activeEvents > 0) return "Hay señales oficiales que coinciden con dependencias configuradas en el grafo.";
-  if (snapshot.graphNodes === 0) return "El perfil personal puede funcionar sin grafo empresarial. El grafo sólo se usa para dependencias reales de una organización.";
+  if (snapshot.graphNodes === 0) return "El perfil personal funciona sin grafo empresarial. El grafo se reserva para dependencias reales de una organización.";
   return "El grafo existe, pero ninguna señal actual produce una exposición operacional persistida.";
+}
+
+function personalAlertLabel(alert: PersonalAlert): string {
+  if (alert.alertKey === "mop:vialidad") return "Emergencias viales";
+  if (alert.alertKey === "mop:obras-hidraulicas") return "Infraestructura hídrica";
+  if (alert.alertKey === "water:river-flow") return "Alerta fluviométrica";
+  if (alert.alertKey === "air-quality") return "Calidad del aire";
+  if (alert.alertKey.startsWith("wildfire-risk:")) return "Riesgo de incendio";
+  if (alert.alertKey.startsWith("wildfire:")) return "Incendio activo";
+  if (alert.alertKey.startsWith("earthquake:")) return "Sismo cercano";
+  if (alert.alertKey.startsWith("volcano:")) return "Alerta volcánica";
+  if (alert.alertKey.startsWith("mop:infraestructura:")) return "Infraestructura MOP";
+  return signalLabel(alert.signalType);
+}
+
+function alertDistance(alert: PersonalAlert): string {
+  if (alert.distanceKm !== undefined) return `${Math.round(alert.distanceKm)} km`;
+  if (alert.relevance === "comuna") return "Misma comuna";
+  if (alert.relevance === "region") return "Misma región";
+  return "Perfil";
+}
+
+function alertLevelClass(level: PersonalAlert["level"]): string {
+  if (level === "critical") return "unavailable";
+  if (level === "warning") return "degraded";
+  return "healthy";
+}
+
+function alertLevelLabel(level: PersonalAlert["level"]): string {
+  if (level === "critical") return "CRÍTICA";
+  if (level === "warning") return "ALERTA";
+  return "VIGILAR";
 }
 
 function signalLabel(value: string): string {
@@ -368,6 +432,7 @@ function signalLabel(value: string): string {
     "energy.generation.monthly_mwh": "Generación eléctrica mensual",
     "energy.fuel.liquid.retail_price_regional": "Precio regional de combustible",
     "energy.fuel.liquid.sales_volume_monthly": "Venta de combustibles",
+    "seismic.earthquake.event": "Sismo",
     "geophysical.earthquake.event": "Sismo",
     "geophysical.volcano.alert": "Alerta volcánica",
   };
@@ -379,6 +444,12 @@ function signalLocation(signal: NowSignal): string {
   if (signal.commune) return signal.commune;
   if (signal.region) return shortRegion(signal.region);
   return "Chile";
+}
+
+function personalRelevanceLabel(signal: PersonalSignal): string {
+  if (signal.relevance === "comuna") return "COMUNA";
+  if (signal.relevance === "cercania") return signal.distanceKm !== undefined ? `${Math.round(signal.distanceKm)} KM` : "CERCA";
+  return "REGIÓN";
 }
 
 function personalReason(signal: PersonalSignal): string {
