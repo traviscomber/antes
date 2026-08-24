@@ -30,6 +30,9 @@ export default async function NowPage() {
   const session = await requireSession();
   const snapshot = await getNowSnapshot(session.organizationId, session.userId);
   const location = snapshot.profile?.homeCommune ?? snapshot.profile?.homeRegion;
+  const regionalContextTitle = snapshot.profile?.homeRegion
+    ? shortRegion(snapshot.profile.homeRegion)
+    : location ?? "tu región";
   const regionalContext = snapshot.personalSignals.filter((signal) => signal.signalType === "news.regional.context");
   const personalSignals = snapshot.personalSignals.filter((signal) => signal.signalType !== "news.regional.context");
 
@@ -185,7 +188,7 @@ export default async function NowPage() {
           <div className="sectionHeading">
             <div>
               <p className="sectionLabel">CONTEXTO REGIONAL</p>
-              <h3>Qué está pasando en Los Ríos</h3>
+              <h3>{`Qué está pasando en ${regionalContextTitle}`}</h3>
             </div>
             <p>Noticias regionales sirven como sensor temprano. No generan una alerta por sí solas: requieren corroboración con una fuente oficial u operacional.</p>
           </div>
