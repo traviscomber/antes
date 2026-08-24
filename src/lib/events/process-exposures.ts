@@ -39,6 +39,7 @@ type ObservationRow = {
 
 export interface ExposureProcessingResult {
   organizationId: string;
+  evaluatorVersion: string;
   observationsEvaluated: number;
   observationsMatched: number;
   matchesPersisted: number;
@@ -49,6 +50,7 @@ export interface ExposureProcessingResult {
 
 const DEFAULT_LIMIT = 500;
 const MAX_LIMIT = 2_000;
+export const EXPOSURE_EVALUATOR_VERSION = "operational-graph-relevance@1";
 
 export async function processPersistedSignalExposures(
   organizationId: string,
@@ -62,6 +64,7 @@ export async function processPersistedSignalExposures(
   if (snapshot.graph.nodes.length === 0) {
     return {
       organizationId,
+      evaluatorVersion: EXPOSURE_EVALUATOR_VERSION,
       observationsEvaluated: 0,
       observationsMatched: 0,
       matchesPersisted: 0,
@@ -111,13 +114,14 @@ export async function processPersistedSignalExposures(
      join signal_sources ss on ss.id = eo.source_id
      where not exists (
        select 1
-         from observation_matches om
-        where om.organization_id = $1
-          and om.observation_id = eo.id
+         from observation_evaluations oe
+        where oe.organization_id = $1
+          and oe.observation_id = eo.id
+          and oe.evaluator_version = $2
      )
      order by eo.observed_at desc, eo.id
-     limit $2`,
-    [organizationId, limit],
+     limit $3`,
+    [organizationId, EXPOSURE_EVALUATOR_VERSION, limit],
   );
 
   let observationsMatched = 0;
@@ -127,21 +131,30 @@ export async function processPersistedSignalExposures(
   for (const row of rows) {
     const observation = observationFromRow(row);
     const matches = matchObservationToGraph(observation, snapshot.graph);
-    if (matches.length === 0) continue;
 
-    observationsMatched += 1;
-    await store.upsertMatches(matches);
-    matchesPersisted += matches.length;
+    if (matches.length > 0) {
+      observationsMatched += 1;
+      await store.upsertMatches(matches);
+      matchesPersisted += matches.length;
 
-    const candidate = buildExternalSignalCandidate(observation, matches);
-    if (candidate) {
-      await store.upsertCandidate(candidate);
-      candidatesPersisted += 1;
+      const candidate = buildExternalSignalCandidate(observation, matches);
+      if (candidate) {
+        await store.upsertCandidate(candidate);
+        candidatesPersisted += 1;
+      }
     }
+
+    await store.recordEvaluation({
+      organizationId,
+      observationId: observation.id,
+      evaluatorVersion: EXPOSURE_EVALUATOR_VERSION,
+      matchCount: matches.length,
+    });
   }
 
   return {
     organizationId,
+    evaluatorVersion: EXPOSURE_EVALUATOR_VERSION,
     observationsEvaluated: rows.length,
     observationsMatched,
     matchesPersisted,
