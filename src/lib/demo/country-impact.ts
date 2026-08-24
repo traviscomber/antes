@@ -6,6 +6,8 @@ import type {
   CountrySignalConnector,
   ExternalObservation,
 } from "@/lib/country-signals/types";
+import { buildExternalSignalCandidate } from "@/lib/events/candidate";
+import type { EventCandidate } from "@/lib/events/types";
 import { matchObservationToGraph } from "@/lib/operational-graph/relevance";
 import { syntheticBeverageGraph } from "./synthetic-graph";
 
@@ -22,6 +24,7 @@ export interface CountryImpactSnapshot {
   }>;
   matches: Array<{
     observation: ExternalObservation;
+    candidate: EventCandidate;
     affectedNodes: Array<{
       nodeId: string;
       nodeName: string;
@@ -57,9 +60,13 @@ export async function buildCountryImpactSnapshot(): Promise<CountryImpactSnapsho
 
     if (graphMatches.length === 0) return [];
 
+    const candidate = buildExternalSignalCandidate(observation, graphMatches);
+    if (!candidate) return [];
+
     return [
       {
         observation,
+        candidate,
         affectedNodes: graphMatches.map((match) => {
           const node = nodeById.get(match.nodeId);
           return {
