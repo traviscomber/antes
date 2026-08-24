@@ -12,6 +12,7 @@ import {
   fetchArcGisFeatureCount,
   fetchArcGisFeatures,
 } from "./arcgis";
+import { fetchMonitoredHidrolineaObservations } from "./dga-hidrolinea";
 import {
   normalizeDgaFeature,
   normalizeMopInfrastructureEmergency,
@@ -27,7 +28,7 @@ const DGA_STATIONS_LAYER =
 
 export class DgaDirectAlertsConnector implements CountrySignalConnector {
   readonly source = DGA_SOURCE;
-  readonly parserVersion = "dga-alertas-arcgis@4";
+  readonly parserVersion = "dga-alertas-arcgis+hidrolinea@5";
 
   async healthCheck(): Promise<SourceHealth> {
     const checkedAt = new Date().toISOString();
@@ -39,7 +40,7 @@ export class DgaDirectAlertsConnector implements CountrySignalConnector {
         state: count > 0 ? "healthy" : "degraded",
         checkedAt,
         latencyMs: Date.now() - startedAt,
-        message: `${count} DGA alert-view rows available; ingestion retains only active alert readings.`,
+        message: `${count} DGA alert-view rows available. Scheduled ingestion also reads configured continuous HIDROLínea stations; that live contract is reflected by ingestion-run health rather than this lightweight probe.`,
       };
     } catch (error) {
       return failureHealth(this.source.id, checkedAt, startedAt, error);
@@ -49,9 +50,15 @@ export class DgaDirectAlertsConnector implements CountrySignalConnector {
   async ingest(): Promise<IngestionBatch> {
     const fetchedAt = new Date().toISOString();
     const startedAt = Date.now();
-    const [readings, stations] = await Promise.all([
+    const [readings, stations, hidrolineaResult] = await Promise.all([
       fetchArcGisFeatures(DGA_READINGS_TABLE),
       fetchArcGisFeatures(DGA_STATIONS_LAYER),
+      fetchMonitoredHidrolineaObservations(fetchedAt, this.parserVersion)
+        .then((observations) => ({ observations, error: undefined as string | undefined }))
+        .catch((error: unknown) => ({
+          observations: [] as ExternalObservation[],
+          error: publicError(error),
+        })),
     ]);
 
     const stationsByCode = new Map<string, (typeof stations)[number]>();
@@ -97,14 +104,25 @@ export class DgaDirectAlertsConnector implements CountrySignalConnector {
       });
     }
 
-    return successBatch(
-      this.source.id,
+    observations.push(...hidrolineaResult.observations);
+    const degraded = Boolean(hidrolineaResult.error);
+    const continuousMessage = degraded
+      ? `continuous HIDROLínea monitoring degraded: ${hidrolineaResult.error}`
+      : `${hidrolineaResult.observations.length} configured HIDROLínea continuous-flow observations normalized`;
+
+    return {
+      sourceId: this.source.id,
       fetchedAt,
-      this.parserVersion,
+      parserVersion: this.parserVersion,
       observations,
-      `${activeAlertRows} active DGA alert rows found; ${observations.length} normalized and ${joinedWithStation} matched to station metadata/geography.`,
-      startedAt,
-    );
+      sourceHealth: {
+        sourceId: this.source.id,
+        state: degraded ? "degraded" : "healthy",
+        checkedAt: fetchedAt,
+        latencyMs: Date.now() - startedAt,
+        message: `${activeAlertRows} active DGA alert rows found; ${observations.length - hidrolineaResult.observations.length} alert observations normalized and ${joinedWithStation} matched to station metadata; ${continuousMessage}.`,
+      },
+    };
   }
 }
 
@@ -184,6 +202,12 @@ function failureHealth(
     state: "unavailable",
     checkedAt,
     latencyMs: Date.now() - startedAt,
-    message: error instanceof Error ? error.message : "Unknown ArcGIS source error",
+    message: publicError(error),
   };
+}
+
+function publicError(error: unknown): string {
+  return error instanceof Error
+    ? error.message.replace(/\s+/g, " ").slice(0, 240)
+    : "Unknown DGA/MOP source error";
 }
