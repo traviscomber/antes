@@ -15,6 +15,7 @@
     "incremental": true,
     "plugins": [{ "name": "next" }],
     "paths": {
+      "@/lib/now/read-model": ["./src/lib/now/read-model-shoa.ts"],
       "@/*": ["./src/*"]
     }
   },
