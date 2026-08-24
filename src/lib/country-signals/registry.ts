@@ -1,3 +1,6 @@
+import { rioenlineaSource } from "./connectors/rioenlinea";
+import { saesaSource } from "./connectors/saesa";
+import { senapredSource } from "./connectors/senapred";
 import type { CountrySignalSource } from "./types";
 
 export const chileSignalSources = [
@@ -298,6 +301,9 @@ export const chileSignalSources = [
     canonicalUrl: "https://www.sernageomin.cl/alertas-volcanicas/",
     description: "Official volcanic technical-alert status. Kept health-only while SERNAGEOMIN's public real-time visualization is unavailable and the production runtime cannot reliably fetch the official site.",
   },
+  senapredSource,
+  saesaSource,
+  rioenlineaSource,
   {
     id: "cl.cne.bencina-en-linea",
     name: "CNE Bencina en Línea",
