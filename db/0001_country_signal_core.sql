@@ -1,5 +1,5 @@
 -- ANTES Country Signal Core v0
--- Design only. This migration has not been applied to any production database.
+-- Development schema. Do not apply to production without an explicit release migration.
 
 create extension if not exists pgcrypto;
 
@@ -12,6 +12,7 @@ create table if not exists signal_sources (
   auth_mode text not null check (auth_mode in ('none', 'api_key', 'token', 'user_token')),
   priority text not null check (priority in ('P0', 'P1', 'P2')),
   cadence text,
+  description text,
   is_enabled boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -62,9 +63,7 @@ create table if not exists external_observations (
   source_version text,
   quality_state text not null check (quality_state in ('raw', 'provisional', 'validated', 'unknown')),
   created_at timestamptz not null default now(),
-  check (
-    num_nonnulls(value_numeric, value_text, value_boolean) <= 1
-  )
+  check (num_nonnulls(value_numeric, value_text, value_boolean) <= 1)
 );
 
 create unique index if not exists external_observations_source_record_unique
@@ -84,7 +83,9 @@ create table if not exists organizations (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   slug text not null unique,
-  created_at timestamptz not null default now()
+  data_mode text not null default 'tenant' check (data_mode in ('tenant', 'synthetic_demo')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 create table if not exists operational_nodes (
@@ -106,12 +107,27 @@ create table if not exists operational_nodes (
 create index if not exists operational_nodes_org_type_idx
   on operational_nodes (organization_id, node_type);
 
+create table if not exists operational_signal_bindings (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references organizations(id) on delete cascade,
+  node_id uuid not null references operational_nodes(id) on delete cascade,
+  source_id text not null references signal_sources(id),
+  signal_type text not null,
+  reason text not null,
+  created_at timestamptz not null default now(),
+  unique (organization_id, node_id, source_id, signal_type)
+);
+
+create index if not exists operational_signal_bindings_lookup_idx
+  on operational_signal_bindings (organization_id, source_id, signal_type);
+
 create table if not exists operational_edges (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references organizations(id) on delete cascade,
   from_node_id uuid not null references operational_nodes(id) on delete cascade,
   to_node_id uuid not null references operational_nodes(id) on delete cascade,
   edge_type text not null,
+  propagates_risk boolean not null default false,
   canonical_attributes jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   check (from_node_id <> to_node_id),
@@ -129,11 +145,12 @@ create table if not exists observation_matches (
   organization_id uuid not null references organizations(id) on delete cascade,
   observation_id text not null references external_observations(id) on delete cascade,
   node_id uuid not null references operational_nodes(id) on delete cascade,
-  match_type text not null check (match_type in ('geographic', 'dependency', 'semantic', 'manual')),
-  confidence double precision check (confidence is null or (confidence >= 0 and confidence <= 1)),
+  match_type text not null check (match_type in ('geographic', 'dependency', 'manual')),
+  rule_id text not null,
+  path_node_ids uuid[] not null,
   evidence jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
-  unique (organization_id, observation_id, node_id, match_type)
+  unique (organization_id, observation_id, node_id, match_type, rule_id)
 );
 
 create index if not exists observation_matches_org_observation_idx
@@ -142,8 +159,39 @@ create index if not exists observation_matches_org_observation_idx
 create index if not exists observation_matches_org_node_idx
   on observation_matches (organization_id, node_id);
 
+create table if not exists event_candidates (
+  id text primary key,
+  organization_id uuid not null references organizations(id) on delete cascade,
+  event_type text not null,
+  state text not null check (state in ('observed', 'confirmed', 'dismissed', 'escalated')),
+  generator_version text not null,
+  source_observation_id text not null references external_observations(id) on delete cascade,
+  source_id text not null references signal_sources(id),
+  signal_type text not null,
+  observed_at timestamptz not null,
+  valid_from timestamptz,
+  valid_until timestamptz,
+  direct_node_ids uuid[] not null,
+  affected_node_ids uuid[] not null,
+  propagation_paths jsonb not null default '[]'::jsonb,
+  evidence_refs text[] not null default '{}',
+  rationale text[] not null default '{}',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (organization_id, source_observation_id, generator_version, event_type)
+);
+
+create index if not exists event_candidates_org_state_time_idx
+  on event_candidates (organization_id, state, observed_at desc);
+
+create index if not exists event_candidates_source_observation_idx
+  on event_candidates (source_observation_id);
+
 comment on table external_observations is
   'Canonical normalized public/external observations. These are not client business facts or events.';
 
 comment on table observation_matches is
-  'Derived, reviewable links between public observations and tenant operational nodes.';
+  'Deterministic, reviewable links between public observations and tenant operational nodes.';
+
+comment on table event_candidates is
+  'Exposure candidates only. This table intentionally contains no probability, financial impact or recommended action fields.';
