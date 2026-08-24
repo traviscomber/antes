@@ -1,8 +1,8 @@
-# ANTES — Roadmap de Producto
+# ANTEMANO — Roadmap de Producto
 
 ## Norte
 
-Construir la versión mínima de ANTES capaz de demostrar con evidencia que una operación puede **detectar antes, decidir antes y reducir el impacto de eventos relevantes**.
+Construir la versión mínima de ANTEMANO capaz de demostrar con evidencia que una operación puede **detectar antes, decidir antes y reducir el impacto de eventos relevantes**.
 
 El roadmap prioriza validación sobre amplitud.
 
@@ -14,8 +14,8 @@ El roadmap prioriza validación sobre amplitud.
 
 Objetivo: fijar producto, dominio y límites antes de escribir funcionalidad que luego debamos rehacer.
 
-- [x] Definir posicionamiento de ANTES
-- [x] Definir ANTES 90
+- [x] Definir posicionamiento de ANTEMANO
+- [x] Definir ANTEMANO 90
 - [x] Definir arquitectura conceptual
 - [x] Definir modelo canónico de eventos
 - [x] Definir primeras familias de eventos
@@ -38,7 +38,7 @@ Objetivo: tener un producto navegable con arquitectura limpia y sin falsa funcio
 - [ ] Inicializar aplicación web
 - [ ] Configurar TypeScript estricto
 - [ ] Configurar lint/format/typecheck
-- [ ] Crear sistema de diseño base N3uralia / ANTES
+- [ ] Crear sistema de diseño base N3uralia / ANTEMANO
 - [ ] Implementar shell y navegación
 - [ ] Implementar autenticación
 - [ ] Implementar tenancy por organización
@@ -130,7 +130,7 @@ Eventos demo:
 
 # Fase 4 — Command Center
 
-Objetivo: demostrar la experiencia diferencial de ANTES.
+Objetivo: demostrar la experiencia diferencial de ANTEMANO.
 
 ## Ahora
 
@@ -228,11 +228,11 @@ Objetivo: cerrar el ciclo sin automatización crítica.
 - [ ] reconciliation
 - [ ] historical comparison
 
-**Gate:** ANTES puede responder qué predijo, qué se decidió y qué terminó ocurriendo.
+**Gate:** ANTEMANO puede responder qué predijo, qué se decidió y qué terminó ocurriendo.
 
 ---
 
-# Fase 8 — ANTES 90 Pilot Readiness
+# Fase 8 — ANTEMANO 90 Pilot Readiness
 
 Objetivo: estar listos para conectar una operación real de forma segura.
 
@@ -257,7 +257,7 @@ Objetivo: estar listos para conectar una operación real de forma segura.
 
 # Fase 9 — Primer piloto real
 
-Objetivo: validar ANTES con 2–3 familias de eventos y datos reales.
+Objetivo: validar ANTEMANO con 2–3 familias de eventos y datos reales.
 
 ## Días 1–15
 
@@ -299,7 +299,7 @@ Objetivo: validar ANTES con 2–3 familias de eventos y datos reales.
 
 # Métricas North Star
 
-ANTES no se optimiza por cantidad de alertas.
+ANTEMANO no se optimiza por cantidad de alertas.
 
 Prioridad:
 
@@ -322,7 +322,7 @@ Métricas de soporte:
 
 # Riesgos que debemos evitar
 
-- convertir ANTES en BI;
+- convertir ANTEMANO en BI;
 - alert fatigue;
 - usar LLMs donde no corresponde;
 - estimar dinero sin una base verificable;
@@ -345,7 +345,7 @@ Entregables:
 2. esquema PostgreSQL v0;
 3. tipos TypeScript;
 4. seed sintético determinístico;
-5. shell visual de ANTES;
+5. shell visual de ANTEMANO;
 6. primera vista `Ahora` alimentada por datos sintéticos claramente marcados;
 7. tests iniciales de dominio y tenancy.
 
