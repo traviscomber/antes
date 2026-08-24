@@ -36,7 +36,6 @@ export const rioenlineaSource = createRegionalRssSource(rioenlineaConfig);
 
 export class RioenLineaRegionalNewsConnector extends RegionalRssContextConnector {
   readonly source = rioenlineaSource;
-  readonly parserVersion = "rioenlinea-rss@2";
 
   constructor() {
     super(rioenlineaConfig);
