@@ -27,6 +27,8 @@ interface ArcGisFeaturesResponse extends JsonObject {
 const USER_AGENT = "N3uralia-ANTEMANO/0.1 (+https://www.antemano.app)";
 const BATCH_SIZE = 50;
 const MAX_OBJECT_IDS = 10_000;
+const MAX_FETCH_ATTEMPTS = 2;
+const RETRY_DELAY_MS = 250;
 
 export async function fetchArcGisFeatureCount(
   layerUrl: string,
@@ -245,23 +247,53 @@ function queryUrl(layerUrl: string): URL {
 }
 
 async function fetchJson(url: URL): Promise<JsonObject> {
-  const response = await fetch(url, {
-    headers: {
-      Accept: "application/json",
-      "User-Agent": USER_AGENT,
-    },
-    cache: "no-store",
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!response.ok) {
-    throw new Error(`ArcGIS request failed with HTTP ${response.status}.`);
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= MAX_FETCH_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        headers: {
+          Accept: "application/json",
+          "User-Agent": USER_AGENT,
+        },
+        cache: "no-store",
+        signal: AbortSignal.timeout(15_000),
+      });
+
+      if (!response.ok) {
+        if (response.status >= 500 && attempt < MAX_FETCH_ATTEMPTS) {
+          await retryDelay(attempt);
+          continue;
+        }
+        throw new Error(`ArcGIS request failed with HTTP ${response.status}.`);
+      }
+
+      const payload = (await response.json()) as unknown;
+      if (!isObject(payload)) {
+        throw new Error("ArcGIS returned an unexpected response.");
+      }
+      throwIfArcGisError(payload.error);
+      return payload;
+    } catch (error) {
+      lastError = error;
+      if (!isRetryableNetworkError(error) || attempt >= MAX_FETCH_ATTEMPTS) {
+        throw error;
+      }
+      await retryDelay(attempt);
+    }
   }
-  const payload = (await response.json()) as unknown;
-  if (!isObject(payload)) {
-    throw new Error("ArcGIS returned an unexpected response.");
-  }
-  throwIfArcGisError(payload.error);
-  return payload;
+
+  throw lastError instanceof Error ? lastError : new Error("ArcGIS request failed.");
+}
+
+function isRetryableNetworkError(error: unknown): boolean {
+  if (error instanceof TypeError) return true;
+  if (!(error instanceof Error)) return false;
+  return error.name === "AbortError" || error.name === "TimeoutError" || /fetch failed/i.test(error.message);
+}
+
+async function retryDelay(attempt: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS * attempt));
 }
 
 function throwIfArcGisError(error: unknown): void {
