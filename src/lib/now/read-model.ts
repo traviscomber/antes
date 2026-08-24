@@ -1,5 +1,9 @@
 import { neon } from "@neondatabase/serverless";
 import {
+  PERSONAL_ALERT_RULE_VERSION,
+  type PersonalAlertLevel,
+} from "@/lib/profile/personal-alerts";
+import {
   fuelTypeMatchesSource,
   getUserProfile,
   type UserProfile,
@@ -35,8 +39,27 @@ export interface NowSignal {
 export interface PersonalSignal extends NowSignal {
   relevance: "comuna" | "region" | "cercania";
   distanceKm?: number;
-  attention: boolean;
   estimatedTankCostClp?: number;
+}
+
+export interface PersonalAlert {
+  id: string;
+  alertKey: string;
+  level: PersonalAlertLevel;
+  reason: string;
+  relevance: "comuna" | "region" | "cercania" | "preferencia";
+  sourceId: string;
+  sourceName: string;
+  signalType: string;
+  observedAt: string;
+  lastSeenAt: string;
+  region?: string;
+  commune?: string;
+  distanceKm?: number;
+  value?: string;
+  itemCount: number;
+  criticalCount: number;
+  warningCount: number;
 }
 
 export interface NowSnapshot {
@@ -56,6 +79,7 @@ export interface NowSnapshot {
   latestSignalAt?: string;
   latestIngestionAt?: string;
   profile: UserProfile | null;
+  personalAlerts: PersonalAlert[];
   personalSignals: PersonalSignal[];
   personalAttentionCount: number;
   events: NowEvent[];
@@ -118,13 +142,35 @@ type PersonalSignalRow = SignalRow & {
   source_fuel_type: string | null;
 };
 
+type PersonalAlertRow = {
+  id: string;
+  alert_key: string;
+  level: PersonalAlertLevel;
+  reason: string;
+  relevance: "commune" | "region" | "proximity" | "preference";
+  source_id: string;
+  source_name: string;
+  signal_type: string;
+  observed_at: string | Date;
+  last_seen_at: string | Date;
+  region: string | null;
+  commune: string | null;
+  distance_km: number | null;
+  value_numeric: number | null;
+  value_text: string | null;
+  value_boolean: boolean | null;
+  unit: string | null;
+  impact: unknown;
+  total_active: number | string;
+};
+
 export async function getNowSnapshot(organizationId: string, userId: string): Promise<NowSnapshot> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL is required for the operational read model.");
 
   const sql = neon(databaseUrl);
   const profile = await getUserProfile(userId);
-  const [metricsRows, eventRows, signalRows, personalRows] = await Promise.all([
+  const [metricsRows, eventRows, signalRows, personalRows, personalAlertRows] = await Promise.all([
     sql.query(
       `select
         (select count(*)::int from event_candidates where organization_id = $1 and state in ('observed','confirmed','escalated')) as active_events,
@@ -208,21 +254,9 @@ export async function getNowSnapshot(organizationId: string, userId: string): Pr
         left join signal_sources s on s.id = o.source_id
       )
       select
-        id,
-        source_id,
-        source_name,
-        signal_type,
-        observed_at,
-        quality_state,
-        severity,
-        region,
-        commune,
-        value_numeric,
-        value_text,
-        value_boolean,
-        unit,
-        source_observations,
-        source_latest_at
+        id, source_id, source_name, signal_type, observed_at, quality_state,
+        severity, region, commune, value_numeric, value_text, value_boolean,
+        unit, source_observations, source_latest_at
       from ranked
       where rn = 1
       order by source_latest_at desc, source_id
@@ -231,6 +265,7 @@ export async function getNowSnapshot(organizationId: string, userId: string): Pr
     profileHasLocation(profile)
       ? loadPersonalRows(databaseUrl, profile)
       : Promise.resolve([] as PersonalSignalRow[]),
+    loadPersonalAlertRows(databaseUrl, userId),
   ]);
 
   const metrics = metricsRows[0] as MetricsRow | undefined;
@@ -246,11 +281,11 @@ export async function getNowSnapshot(organizationId: string, userId: string): Pr
     affectedNodes: Number(row.affected_nodes ?? 0),
     rationale: row.rationale ?? [],
   }));
-
   const signals = (signalRows as SignalRow[]).map(mapSignal);
   const personalSignals = personalRows
     .filter((row) => fuelSignalMatchesProfile(row, profile))
     .map((row) => mapPersonalSignal(row, profile));
+  const personalAlerts = personalAlertRows.map(mapPersonalAlert);
 
   return {
     generatedAt: new Date().toISOString(),
@@ -269,11 +304,54 @@ export async function getNowSnapshot(organizationId: string, userId: string): Pr
     latestSignalAt: toOptionalIso(metrics?.latest_signal_at),
     latestIngestionAt: toOptionalIso(metrics?.latest_ingestion_at),
     profile,
+    personalAlerts,
     personalSignals,
-    personalAttentionCount: personalSignals.filter((signal) => signal.attention).length,
+    personalAttentionCount: Number(personalAlertRows[0]?.total_active ?? 0),
     events,
     signals,
   };
+}
+
+async function loadPersonalAlertRows(
+  databaseUrl: string,
+  userId: string,
+): Promise<PersonalAlertRow[]> {
+  const sql = neon(databaseUrl);
+  const rows = await sql.query(
+    `select
+       pa.id,
+       pa.alert_key,
+       pa.level,
+       pa.reason,
+       pa.relevance,
+       pa.source_id,
+       coalesce(ss.name, pa.source_id) as source_name,
+       pa.signal_type,
+       eo.observed_at,
+       pa.last_seen_at,
+       eo.region,
+       eo.commune,
+       pa.distance_km,
+       eo.value_numeric,
+       eo.value_text,
+       eo.value_boolean,
+       eo.unit,
+       pa.impact,
+       count(*) over ()::int as total_active
+     from personal_alerts pa
+     join external_observations eo on eo.id = pa.observation_id
+     left join signal_sources ss on ss.id = pa.source_id
+     where pa.user_id = $1
+       and pa.state = 'active'
+       and pa.rule_version = $2
+     order by
+       case pa.level when 'critical' then 0 when 'warning' then 1 else 2 end,
+       pa.distance_km nulls last,
+       pa.updated_at desc
+     limit 50`,
+    [userId, PERSONAL_ALERT_RULE_VERSION],
+  );
+  return rows as PersonalAlertRow[];
 }
 
 async function loadPersonalRows(
@@ -295,6 +373,7 @@ async function loadPersonalRows(
          o.signal_type,
          o.observed_at,
          o.ingested_at,
+         o.last_seen_at,
          o.quality_state,
          o.severity,
          o.region,
@@ -307,7 +386,7 @@ async function loadPersonalRows(
          o.unit,
          o.normalized_payload ->> 'fuelType' as source_fuel_type,
          count(*) over (partition by o.source_id)::int as source_observations,
-         max(o.observed_at) over (partition by o.source_id) as source_latest_at,
+         max(o.last_seen_at) over (partition by o.source_id) as source_latest_at,
          case
            when $3::double precision is not null
             and $4::double precision is not null
@@ -340,7 +419,7 @@ async function loadPersonalRows(
            partition by source_id
            order by
              relevance_rank desc,
-             observed_at desc,
+             last_seen_at desc,
              case severity
                when 'critical' then 5
                when 'high' then 4
@@ -349,39 +428,20 @@ async function loadPersonalRows(
                when 'info' then 1
                else 0
              end desc,
+             observed_at desc,
              value_numeric desc nulls last,
-             ingested_at desc,
              id
          ) as rn
        from relevant
      )
      select
-       id,
-       source_id,
-       source_name,
-       signal_type,
-       observed_at,
-       quality_state,
-       severity,
-       region,
-       commune,
-       latitude,
-       longitude,
-       value_numeric,
-       value_text,
-       value_boolean,
-       unit,
-       source_observations,
-       source_latest_at,
-       distance_km,
-       relevance_rank,
-       source_fuel_type
+       id, source_id, source_name, signal_type, observed_at, quality_state,
+       severity, region, commune, latitude, longitude, value_numeric, value_text,
+       value_boolean, unit, source_observations, source_latest_at, distance_km,
+       relevance_rank, source_fuel_type
      from ranked
      where rn = 1
-     order by
-       case when severity in ('critical','high','warning') then 0 else 1 end,
-       relevance_rank desc,
-       observed_at desc
+     order by relevance_rank desc, source_latest_at desc, source_id
      limit 16`,
     [commune, region, latitude, longitude],
   );
@@ -409,29 +469,42 @@ function mapPersonalSignal(row: PersonalSignalRow, profile: UserProfile | null):
   const rank = Number(row.relevance_rank ?? 0);
   const distanceKm = row.distance_km === null ? undefined : Number(row.distance_km);
   const relevance: PersonalSignal["relevance"] = rank >= 4 ? "comuna" : rank >= 3 ? "cercania" : "region";
-  const attention = needsAttention(row, relevance, distanceKm);
-  const estimatedTankCostClp = estimatedTankCost(row, profile);
 
   return {
     ...mapSignal(row),
     relevance,
     distanceKm,
-    attention,
-    estimatedTankCostClp,
+    estimatedTankCostClp: estimatedTankCost(row, profile),
   };
 }
 
-function needsAttention(
-  row: PersonalSignalRow,
-  relevance: PersonalSignal["relevance"],
-  distanceKm?: number,
-): boolean {
-  const urgentSeverity = row.severity === "critical" || row.severity === "high" || row.severity === "warning";
-  const local = relevance === "comuna" || (relevance === "cercania" && (distanceKm ?? Infinity) <= 50);
-  if (urgentSeverity && local) return true;
-  if (row.signal_type === "fire.wildfire.active" && (local || (distanceKm ?? Infinity) <= 80)) return true;
-  if (row.signal_type === "water.river.flow_alert" && local) return true;
-  return false;
+function mapPersonalAlert(row: PersonalAlertRow): PersonalAlert {
+  const impact = objectValue(row.impact);
+  return {
+    id: row.id,
+    alertKey: row.alert_key,
+    level: row.level,
+    reason: row.reason,
+    relevance: row.relevance === "commune"
+      ? "comuna"
+      : row.relevance === "proximity"
+        ? "cercania"
+        : row.relevance === "preference"
+          ? "preferencia"
+          : "region",
+    sourceId: row.source_id,
+    sourceName: row.source_name,
+    signalType: row.signal_type,
+    observedAt: toIso(row.observed_at),
+    lastSeenAt: toIso(row.last_seen_at),
+    region: row.region ?? undefined,
+    commune: row.commune ?? undefined,
+    distanceKm: row.distance_km === null ? undefined : Number(row.distance_km),
+    value: formatSignalValue(row),
+    itemCount: numericJson(impact.observationCount) ?? 1,
+    criticalCount: numericJson(impact.criticalCount) ?? (row.level === "critical" ? 1 : 0),
+    warningCount: numericJson(impact.warningCount) ?? (row.level === "warning" ? 1 : 0),
+  };
 }
 
 function estimatedTankCost(row: PersonalSignalRow, profile: UserProfile | null): number | undefined {
@@ -452,7 +525,11 @@ function fuelSignalMatchesProfile(row: PersonalSignalRow, profile: UserProfile |
 }
 
 function profileHasLocation(profile: UserProfile | null): profile is UserProfile {
-  return Boolean(profile && (profile.homeCommune || profile.homeRegion || (profile.homeLatitude !== undefined && profile.homeLongitude !== undefined)));
+  return Boolean(profile && (
+    profile.homeCommune ||
+    profile.homeRegion ||
+    (profile.homeLatitude !== undefined && profile.homeLongitude !== undefined)
+  ));
 }
 
 function toIso(value: string | Date): string {
@@ -464,11 +541,23 @@ function toOptionalIso(value: string | Date | null | undefined): string | undefi
   return toIso(value);
 }
 
-function formatSignalValue(row: Pick<SignalRow, "value_numeric" | "value_text" | "value_boolean" | "unit">): string | undefined {
+function formatSignalValue(
+  row: Pick<SignalRow, "value_numeric" | "value_text" | "value_boolean" | "unit">,
+): string | undefined {
   if (row.value_numeric !== null) {
     return `${row.value_numeric}${row.unit ? ` ${row.unit}` : ""}`;
   }
   if (row.value_text !== null) return row.value_text;
   if (row.value_boolean !== null) return row.value_boolean ? "Sí" : "No";
   return undefined;
+}
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function numericJson(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
