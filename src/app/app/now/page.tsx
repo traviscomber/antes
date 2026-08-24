@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireSession } from "@/lib/auth/session";
 import { AnticipationPanel } from "./anticipation-panel";
+import styles from "./now.module.css";
 import { getNowSnapshot, type PersonalAlert, type PersonalSignal } from "@/lib/now/read-model";
 
 export const dynamic = "force-dynamic";
@@ -65,7 +66,7 @@ export default async function NowPage() {
           </div>
           <p>Primero lo crítico y vigente. Los eventos futuros aparecen después, en “Antes que pase”.</p>
         </div>
-        <div className="sourceGrid nowGrid">
+        <div className={`sourceGrid ${styles.grid}`}>
           {snapshot.personalAlerts.length ? snapshot.personalAlerts.map((alert) => (
             <AlertCard key={alert.id} alert={alert} />
           )) : (
@@ -88,7 +89,7 @@ export default async function NowPage() {
           </div>
           <p>Ordenado por impacto y cercanía. Son coincidencias territoriales que todavía no necesariamente requieren una alerta.</p>
         </div>
-        <div className="sourceGrid nowGrid">
+        <div className={`sourceGrid ${styles.grid}`}>
           {relevant.length ? relevant.map((signal) => (
             <SignalCard key={signal.id} signal={signal} />
           )) : (
@@ -110,7 +111,7 @@ export default async function NowPage() {
             </div>
             <p>Noticias regionales funcionan como sensor temprano. No generan alerta por sí solas.</p>
           </div>
-          <div className="sourceGrid nowGrid">
+          <div className={`sourceGrid ${styles.grid}`}>
             {context.map((signal) => <SignalCard key={signal.id} signal={signal} context />)}
           </div>
         </section>
