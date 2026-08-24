@@ -1,8 +1,8 @@
-# ANTES 90 — Especificación del MVP
+# ANTEMANO 90 — Especificación del MVP
 
 ## Objetivo del producto
 
-ANTES 90 debe demostrar una hipótesis concreta:
+ANTEMANO 90 debe demostrar una hipótesis concreta:
 
 > **Una operación puede ganar tiempo útil antes de un impacto relevante si conectamos señales internas y externas, modelamos dependencias y evaluamos eventos en shadow mode.**
 
@@ -94,7 +94,7 @@ Mostrar únicamente lo que requiere atención.
 ### Encabezado
 
 ```text
-ANTES
+ANTEMANO
 Hoy
 ```
 
@@ -268,7 +268,7 @@ Filtros iniciales:
 
 ## Intención
 
-Mostrar si ANTES puede confiar en sus señales.
+Mostrar si ANTEMANO puede confiar en sus señales.
 
 Por fuente:
 
@@ -396,7 +396,7 @@ El piloto debe elegir 2–3 según disponibilidad y calidad de datos, no según 
 
 ## Datos sintéticos de demo
 
-ANTES necesita una demo comercial antes de tener un piloto productivo.
+ANTEMANO necesita una demo comercial antes de tener un piloto productivo.
 
 La demo debe usar un dataset explícitamente sintético que represente:
 
@@ -433,7 +433,7 @@ No usar marcas o clientes reales en la demo pública sin autorización.
 
 ## Definition of Done del MVP
 
-ANTES 90 MVP se considera demostrable cuando:
+ANTEMANO 90 MVP se considera demostrable cuando:
 
 1. una fuente puede ingresar observaciones;
 2. las observaciones quedan trazables a una entidad;
@@ -453,7 +453,7 @@ ANTES 90 MVP se considera demostrable cuando:
 
 ---
 
-## Criterio de éxito de ANTES 90
+## Criterio de éxito de ANTEMANO 90
 
 El piloto sólo debe recomendar escalamiento si demuestra, con datos reales:
 
