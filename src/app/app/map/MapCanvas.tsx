@@ -1,5 +1,6 @@
 "use client";
 
+import "leaflet/dist/leaflet.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Map as LeafletMap, LayerGroup } from "leaflet";
 import type { MapLayer, MapPoint } from "@/lib/map/read-model";
@@ -51,7 +52,6 @@ export default function MapCanvas({ latitude, longitude, points, alerts, locatio
 
       markerLayerRef.current = L.layerGroup().addTo(map);
       mapRef.current = map;
-
       requestAnimationFrame(() => map.invalidateSize());
     }
 
