@@ -18,6 +18,8 @@ export interface UserProfile {
 export interface UserProfileInput {
   homeRegion?: string;
   homeCommune?: string;
+  homeLatitude?: number;
+  homeLongitude?: number;
   vehicleName?: string;
   fuelType?: FuelType;
   tankCapacityLiters?: number;
@@ -73,7 +75,9 @@ export async function saveUserProfile(userId: string, input: UserProfileInput): 
   const vehicleName = clean(input.vehicleName, 120);
   const fuelType = input.fuelType && FUEL_TYPES.has(input.fuelType) ? input.fuelType : undefined;
   const tankCapacityLiters = validTank(input.tankCapacityLiters) ? input.tankCapacityLiters : undefined;
-  const knownLocation = locationCoordinates(homeRegion, homeCommune);
+  const coordinates = validCoordinates(input.homeLatitude, input.homeLongitude)
+    ? { latitude: input.homeLatitude, longitude: input.homeLongitude }
+    : undefined;
 
   const rows = await db().query(
     `insert into user_profiles (
@@ -113,8 +117,8 @@ export async function saveUserProfile(userId: string, input: UserProfileInput): 
       userId,
       homeRegion ?? null,
       homeCommune ?? null,
-      knownLocation?.latitude ?? null,
-      knownLocation?.longitude ?? null,
+      coordinates?.latitude ?? null,
+      coordinates?.longitude ?? null,
       vehicleName ?? null,
       fuelType ?? null,
       tankCapacityLiters ?? null,
@@ -170,13 +174,12 @@ function validTank(value: number | undefined): value is number {
   return value !== undefined && Number.isFinite(value) && value >= 1 && value <= 500;
 }
 
-function locationCoordinates(region?: string, commune?: string): { latitude: number; longitude: number } | undefined {
-  const normalizedRegion = region?.trim().toLocaleLowerCase("es-CL");
-  const normalizedCommune = commune?.trim().toLocaleLowerCase("es-CL");
-
-  if (normalizedCommune === "valdivia" && normalizedRegion?.includes("los ríos")) {
-    return { latitude: -39.8142, longitude: -73.2459 };
-  }
-
-  return undefined;
+function validCoordinates(
+  latitude: number | undefined,
+  longitude: number | undefined,
+): latitude is number {
+  return latitude !== undefined && longitude !== undefined &&
+    Number.isFinite(latitude) && Number.isFinite(longitude) &&
+    latitude >= -90 && latitude <= 90 &&
+    longitude >= -180 && longitude <= 180;
 }
