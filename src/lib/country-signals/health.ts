@@ -33,6 +33,7 @@ import { ObservatorioLogisticoConnector } from "./connectors/observatorio-logist
 import { OdepaWholesaleProduceConnector } from "./connectors/odepa-wholesale";
 import { RioenLineaRegionalNewsConnector } from "./connectors/rioenlinea";
 import { SaesaPowerOutageConnector } from "./connectors/saesa";
+import { SecNationalPowerOutageConnector } from "./connectors/sec-power-outages";
 import { SenapredOfficialAlertConnector } from "./connectors/senapred";
 import { probeSernageominVolcanicAlertHealth } from "./connectors/sernageomin";
 import { probeShoACitsuHealth } from "./connectors/shoa-citsu";
@@ -60,6 +61,7 @@ export async function getChileSignalHealth(): Promise<SourceHealth[]> {
     new MopAllInfrastructureEmergenciesConnector(),
     new ConafActiveFiresConnector(),
     new SenapredOfficialAlertConnector(),
+    new SecNationalPowerOutageConnector(),
     new SaesaPowerOutageConnector(),
     new AguasDecimaCurrentEventsConnector(),
     new RioenLineaRegionalNewsConnector(),
