@@ -5,38 +5,57 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const UA = "N3uralia-ANTEMANO/0.1 (+https://www.antemano.app)";
-const MAIN = "https://desconexiones.gruposaesa.cl/static/js/main.eb7077f8.chunk.js";
+const BASE = "https://mfallas.saesa.cl";
 
 export async function GET() {
-  const response = await fetch(MAIN, {
-    headers: { Accept: "application/javascript,*/*;q=0.8", "User-Agent": UA },
-    cache: "no-store",
-    signal: AbortSignal.timeout(20_000),
-  });
-  const text = await response.text();
-  const needles = [
-    "REACT_APP_HEADER_API_KEY",
-    "public/token",
-    "cortes/orden",
-    "cortes_futuros.kml",
-    ".kml",
-    "x-api-key",
-    "obtenerTokenDesconexion",
-    "obtenerRespuestaCorte",
-  ];
-  const snippets = Object.fromEntries(needles.map((needle) => [needle, around(text, needle)]));
-  const kml = Array.from(new Set(text.match(/\/[A-Za-z0-9_./-]+\.kml/g) ?? [])).sort();
-  return NextResponse.json({ ok: response.ok, status: response.status, length: text.length, kml, snippets });
+  const [current, future] = await Promise.all([
+    probeKml(`${BASE}/outage.kml`),
+    probeKml(`${BASE}/cortes_futuros.kml`),
+  ]);
+  return NextResponse.json({ ok: true, current, future });
 }
 
-function around(text: string, needle: string): string[] {
-  const result: string[] = [];
-  let offset = 0;
-  while (result.length < 8) {
-    const index = text.indexOf(needle, offset);
-    if (index < 0) break;
-    result.push(text.slice(Math.max(0, index - 450), Math.min(text.length, index + needle.length + 700)));
-    offset = index + needle.length;
+async function probeKml(url: string) {
+  try {
+    const response = await fetch(`${url}?${Date.now()}`, {
+      headers: { Accept: "application/vnd.google-earth.kml+xml,application/xml,text/xml,*/*", "User-Agent": UA },
+      cache: "no-store",
+      signal: AbortSignal.timeout(20_000),
+    });
+    const text = await response.text();
+    const placemarks = text.match(/<Placemark\b[\s\S]*?<\/Placemark>/gi) ?? [];
+    return {
+      status: response.status,
+      contentType: response.headers.get("content-type"),
+      length: text.length,
+      count: placemarks.length,
+      samples: placemarks.slice(0, 8).map((item) => ({
+        name: readTag(item, "name"),
+        description: clean(readTag(item, "description") ?? "").slice(0, 1400),
+        coordinates: readTag(item, "coordinates"),
+      })),
+    };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error) };
   }
-  return result;
+}
+
+function readTag(xml: string, tag: string): string | undefined {
+  const match = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i"));
+  if (!match) return undefined;
+  return decode(match[1].replace(/^<!\[CDATA\[/, "").replace(/\]\]>$/, "")).trim();
+}
+
+function clean(value: string): string {
+  return decode(value.replace(/<br\s*\/?\s*>/gi, " | ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ")).trim();
+}
+
+function decode(value: string): string {
+  return value
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">");
 }
