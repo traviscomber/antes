@@ -18,7 +18,7 @@ export async function GET() {
     const page = await fetchText(CONAF_PAGE);
     const reportUrls = extractPowerBiUrls(page);
     const reports = await Promise.all(
-      reportUrls.map(async (url, index) => inspectReport(url, index, page)),
+      reportUrls.map(async (url, index) => inspectReportSafe(url, index, page)),
     );
 
     return NextResponse.json({ generatedAt: new Date().toISOString(), reports });
@@ -30,6 +30,19 @@ export async function GET() {
   }
 }
 
+async function inspectReportSafe(url: string, index: number, conafHtml: string) {
+  try {
+    return await inspectReport(url, index, conafHtml);
+  } catch (error) {
+    return {
+      index,
+      context: pageContext(conafHtml, url),
+      descriptor: decodeDescriptor(url),
+      error: error instanceof Error ? error.message : "Power BI report inspection failed.",
+    };
+  }
+}
+
 async function inspectReport(url: string, index: number, conafHtml: string) {
   const descriptor = decodeDescriptor(url);
   const html = await fetchText(url);
@@ -38,34 +51,45 @@ async function inspectReport(url: string, index: number, conafHtml: string) {
     html,
     /var\s+telemetrySessionId\s*=\s*['\"]([^'\"]+)['\"]/i,
   );
+  const embeddedFixedCluster =
+    firstMatch(html, /var\s+resolvedClusterUri\s*=\s*['\"]([^'\"]+)['\"]/i) ||
+    firstMatch(html, /\"FixedClusterUri\"\s*:\s*\"([^\"]+)\"/i);
   const context = pageContext(conafHtml, url);
 
   let routing: unknown;
   let models: unknown;
   let conceptualSchema: unknown;
-  if (descriptor && clusterUri) {
+  let resolvedCluster = embeddedFixedCluster;
+
+  if (descriptor && clusterUri && !resolvedCluster) {
     const activityId = telemetrySessionId || randomUUID();
-    const routeRequestId = randomUUID();
     const routingUrl = `${getApimUrl(clusterUri)}/public/routing/cluster/${descriptor.tenantId}`;
-    routing = await fetchJson(routingUrl, descriptor.resourceKey, activityId, routeRequestId);
-    const fixedCluster = readString(routing, "FixedClusterUri");
-    if (fixedCluster) {
-      const apim = getApimUrl(fixedCluster);
-      [models, conceptualSchema] = await Promise.all([
-        fetchJson(
-          `${apim}/public/reports/${descriptor.resourceKey}/modelsAndExploration?preferReadOnlySession=true`,
-          descriptor.resourceKey,
-          activityId,
-          randomUUID(),
-        ),
-        fetchJson(
-          `${apim}/public/reports/${descriptor.resourceKey}/conceptualschema`,
-          descriptor.resourceKey,
-          activityId,
-          randomUUID(),
-        ),
-      ]);
-    }
+    routing = await tryFetchJson(
+      routingUrl,
+      descriptor.resourceKey,
+      activityId,
+      randomUUID(),
+    );
+    resolvedCluster = readString(routing, "FixedClusterUri");
+  }
+
+  if (descriptor && resolvedCluster) {
+    const activityId = telemetrySessionId || randomUUID();
+    const apim = getApimUrl(resolvedCluster);
+    [models, conceptualSchema] = await Promise.all([
+      tryFetchJson(
+        `${apim}/public/reports/${descriptor.resourceKey}/modelsAndExploration?preferReadOnlySession=true`,
+        descriptor.resourceKey,
+        activityId,
+        randomUUID(),
+      ),
+      tryFetchJson(
+        `${apim}/public/reports/${descriptor.resourceKey}/conceptualschema`,
+        descriptor.resourceKey,
+        activityId,
+        randomUUID(),
+      ),
+    ]);
   }
 
   return {
@@ -74,6 +98,8 @@ async function inspectReport(url: string, index: number, conafHtml: string) {
     descriptor,
     bytes: html.length,
     clusterUri,
+    embeddedFixedCluster,
+    resolvedCluster,
     routing: summarizeRouting(routing),
     models: summarizeModels(models),
     conceptualSchema: summarizeSchema(conceptualSchema),
@@ -90,7 +116,10 @@ function decodeDescriptor(url: string): PublicReportDescriptor | undefined {
   const encoded = new URL(url).searchParams.get("r");
   if (!encoded) return undefined;
   try {
-    const padded = encoded.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(encoded.length / 4) * 4, "=");
+    const padded = encoded
+      .replace(/-/g, "+")
+      .replace(/_/g, "/")
+      .padEnd(Math.ceil(encoded.length / 4) * 4, "=");
     const payload = JSON.parse(Buffer.from(padded, "base64").toString("utf8")) as {
       t?: unknown;
       k?: unknown;
@@ -113,36 +142,46 @@ async function fetchText(url: string): Promise<string> {
   return response.text();
 }
 
-async function fetchJson(
+async function tryFetchJson(
   url: string,
   resourceKey: string,
   activityId: string,
   requestId: string,
 ): Promise<unknown> {
-  const response = await fetch(url, {
-    headers: {
-      Accept: "application/json",
-      ActivityId: activityId,
-      RequestId: requestId,
-      "X-PowerBI-ResourceKey": resourceKey,
-      "User-Agent": USER_AGENT,
-    },
-    cache: "no-store",
-    signal: AbortSignal.timeout(20_000),
-  });
-  const text = await response.text();
-  if (!response.ok) return { httpStatus: response.status, body: text.slice(0, 500) };
   try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    return { httpStatus: response.status, body: text.slice(0, 500) };
+    const response = await fetch(url, {
+      headers: {
+        Accept: "application/json",
+        ActivityId: activityId,
+        RequestId: requestId,
+        "X-PowerBI-ResourceKey": resourceKey,
+        "User-Agent": USER_AGENT,
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(20_000),
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      return { endpoint: url, httpStatus: response.status, body: text.slice(0, 700) };
+    }
+    try {
+      return JSON.parse(text) as unknown;
+    } catch {
+      return { endpoint: url, httpStatus: response.status, body: text.slice(0, 700) };
+    }
+  } catch (error) {
+    return {
+      endpoint: url,
+      fetchError: error instanceof Error ? error.message : "fetch failed",
+    };
   }
 }
 
 function getApimUrl(clusterUri: string): string {
   const url = new URL(clusterUri);
-  const host = url.hostname.replace(/-redirect(?=\.analysis\.windows\.net$)/i, "");
-  return `${url.protocol}//${host}`.replace(/\/$/, "");
+  const tokens = url.hostname.split(".");
+  tokens[0] = tokens[0].replace("-redirect", "").replace("global-", "") + "-api";
+  return `${url.protocol}//${tokens.join(".")}`.replace(/\/$/, "");
 }
 
 function pageContext(html: string, url: string): string {
@@ -150,7 +189,7 @@ function pageContext(html: string, url: string): string {
   const idx = decoded.indexOf(url);
   if (idx < 0) return "";
   return decoded
-    .slice(Math.max(0, idx - 450), Math.min(decoded.length, idx + url.length + 220))
+    .slice(Math.max(0, idx - 500), Math.min(decoded.length, idx + url.length + 260))
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -160,6 +199,8 @@ function summarizeRouting(value: unknown) {
   if (!isObject(value)) return value;
   return {
     fixedClusterUri: readString(value, "FixedClusterUri"),
+    endpoint: value.endpoint,
+    fetchError: value.fetchError,
     httpStatus: value.httpStatus,
     body: value.body,
   };
@@ -167,8 +208,16 @@ function summarizeRouting(value: unknown) {
 
 function summarizeModels(value: unknown) {
   if (!isObject(value)) return value;
-  const models = Array.isArray(value.models) ? value.models : Array.isArray(value.Models) ? value.Models : [];
+  const models = Array.isArray(value.models)
+    ? value.models
+    : Array.isArray(value.Models)
+      ? value.Models
+      : [];
+  const text = JSON.stringify(value);
+  const sectionNames = [...text.matchAll(/\"displayName\":\"([^\"]+)\"/g)].map((m) => m[1]);
   return {
+    endpoint: value.endpoint,
+    fetchError: value.fetchError,
     httpStatus: value.httpStatus,
     body: value.body,
     keys: Object.keys(value).slice(0, 30),
@@ -180,27 +229,29 @@ function summarizeModels(value: unknown) {
         dbName: model.dbName ?? model.DbName,
       };
     }),
-    explorationKeys: isObject(value.exploration) ? Object.keys(value.exploration).slice(0, 30) : undefined,
+    sectionNames: [...new Set(sectionNames)].slice(0, 50),
+    bytes: text.length,
   };
 }
 
 function summarizeSchema(value: unknown) {
   if (!isObject(value)) return value;
-  const schemas = Object.values(value).filter(isObject);
   const text = JSON.stringify(value);
   const names = [...text.matchAll(/\"(?:Name|name)\":\"([^\"]+)\"/g)].map((m) => m[1]);
   return {
+    endpoint: value.endpoint,
+    fetchError: value.fetchError,
     httpStatus: value.httpStatus,
     body: value.body,
     keys: Object.keys(value).slice(0, 30),
-    objectCount: schemas.length,
-    names: [...new Set(names)].slice(0, 160),
+    names: [...new Set(names)].slice(0, 220),
     bytes: text.length,
   };
 }
 
 function firstMatch(html: string, pattern: RegExp): string | undefined {
-  return html.match(pattern)?.[1];
+  const value = html.match(pattern)?.[1];
+  return value || undefined;
 }
 
 function readString(value: unknown, key: string): string | undefined {
