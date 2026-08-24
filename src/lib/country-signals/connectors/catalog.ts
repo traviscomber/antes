@@ -6,6 +6,7 @@ import { createCneFuelConnector } from "./cne-fuels";
 import { CneGenerationConnector } from "./cne-generation";
 import { ConafActiveFiresConnector } from "./conaf-active-fires";
 import { ConafWildfireForecastConnector } from "./conaf";
+import { CsnEarthquakeConnector } from "./csn";
 import { DgaScarcityDecreeConnector } from "./dga-scarcity";
 import { DgaVipNetReservoirConnector } from "./dga-vipnet";
 import { DmcWrfConnector } from "./dmc";
@@ -76,6 +77,8 @@ export function createCountrySignalConnector(
       return new SeaSeiaProjectConnector();
     case "cl.chilecompra.daily-tenders":
       return new ChileCompraDailyTenderConnector();
+    case "cl.csn.earthquakes":
+      return new CsnEarthquakeConnector();
     case "cl.cne.liquid-fuel-prices":
       return createCneFuelConnector("cl.cne.liquid-fuel-prices");
     case "cl.cne.liquid-fuel-sales":
