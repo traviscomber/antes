@@ -40,6 +40,10 @@ export interface PersonalSignal extends NowSignal {
   relevance: "comuna" | "region" | "cercania";
   distanceKm?: number;
   estimatedTankCostClp?: number;
+  stationBrand?: string;
+  stationAddress?: string;
+  serviceMode?: string;
+  profileFuelType?: string;
 }
 
 export interface PersonalAlert {
@@ -140,6 +144,9 @@ type PersonalSignalRow = SignalRow & {
   distance_km: number | null;
   relevance_rank: number | string;
   source_fuel_type: string | null;
+  station_brand: string | null;
+  station_address: string | null;
+  service_mode: string | null;
 };
 
 type PersonalAlertRow = {
@@ -384,9 +391,16 @@ async function loadPersonalRows(
          o.value_text,
          o.value_boolean,
          o.unit,
-         o.normalized_payload ->> 'fuelType' as source_fuel_type,
-         count(*) over (partition by o.source_id)::int as source_observations,
-         max(o.last_seen_at) over (partition by o.source_id) as source_latest_at,
+         coalesce(o.normalized_payload ->> 'profileFuelType', o.normalized_payload ->> 'fuelType') as source_fuel_type,
+         o.normalized_payload ->> 'brandName' as station_brand,
+         o.normalized_payload ->> 'address' as station_address,
+         o.normalized_payload ->> 'serviceMode' as service_mode,
+         count(*) over (
+           partition by o.source_id, coalesce(o.normalized_payload ->> 'profileFuelType', o.normalized_payload ->> 'fuelType', '')
+         )::int as source_observations,
+         max(o.last_seen_at) over (
+           partition by o.source_id, coalesce(o.normalized_payload ->> 'profileFuelType', o.normalized_payload ->> 'fuelType', '')
+         ) as source_latest_at,
          case
            when $3::double precision is not null
             and $4::double precision is not null
@@ -400,6 +414,8 @@ async function loadPersonalRows(
          end as distance_km
        from external_observations o
        left join signal_sources s on s.id = o.source_id
+       where o.signal_type <> 'energy.fuel.station.retail_price'
+          or o.observed_at >= now() - interval '14 days'
      ), relevant as (
        select *,
          case
@@ -416,9 +432,11 @@ async function loadPersonalRows(
      ), ranked as (
        select *,
          row_number() over (
-           partition by source_id
+           partition by source_id, coalesce(source_fuel_type, '')
            order by
              relevance_rank desc,
+             case when signal_type = 'energy.fuel.station.retail_price' then value_numeric end asc nulls last,
+             case when signal_type = 'energy.fuel.station.retail_price' then distance_km end asc nulls last,
              last_seen_at desc,
              case severity
                when 'critical' then 5
@@ -438,11 +456,11 @@ async function loadPersonalRows(
        id, source_id, source_name, signal_type, observed_at, quality_state,
        severity, region, commune, latitude, longitude, value_numeric, value_text,
        value_boolean, unit, source_observations, source_latest_at, distance_km,
-       relevance_rank, source_fuel_type
+       relevance_rank, source_fuel_type, station_brand, station_address, service_mode
      from ranked
      where rn = 1
-     order by relevance_rank desc, source_latest_at desc, source_id
-     limit 16`,
+     order by relevance_rank desc, source_latest_at desc, source_id, source_fuel_type nulls last
+     limit 24`,
     [commune, region, latitude, longitude],
   );
 
@@ -469,12 +487,25 @@ function mapPersonalSignal(row: PersonalSignalRow, profile: UserProfile | null):
   const rank = Number(row.relevance_rank ?? 0);
   const distanceKm = row.distance_km === null ? undefined : Number(row.distance_km);
   const relevance: PersonalSignal["relevance"] = rank >= 4 ? "comuna" : rank >= 3 ? "cercania" : "region";
+  const base = mapSignal(row);
+  const stationSourceName = row.signal_type === "energy.fuel.station.retail_price" && row.station_brand
+    ? `${base.sourceName} · ${row.station_brand}`
+    : base.sourceName;
+  const stationDetail = row.signal_type === "energy.fuel.station.retail_price"
+    ? [base.value, row.station_address, serviceModeLabel(row.service_mode)].filter(Boolean).join(" · ")
+    : base.value;
 
   return {
-    ...mapSignal(row),
+    ...base,
+    sourceName: stationSourceName,
+    value: stationDetail,
     relevance,
     distanceKm,
     estimatedTankCostClp: estimatedTankCost(row, profile),
+    stationBrand: row.station_brand ?? undefined,
+    stationAddress: row.station_address ?? undefined,
+    serviceMode: row.service_mode ?? undefined,
+    profileFuelType: row.source_fuel_type ?? undefined,
   };
 }
 
@@ -509,7 +540,7 @@ function mapPersonalAlert(row: PersonalAlertRow): PersonalAlert {
 
 function estimatedTankCost(row: PersonalSignalRow, profile: UserProfile | null): number | undefined {
   if (
-    row.signal_type !== "energy.fuel.liquid.retail_price_regional" ||
+    !isFuelPriceSignal(row.signal_type) ||
     row.value_numeric === null ||
     !profile?.tankCapacityLiters ||
     !fuelTypeMatchesSource(profile.fuelType, row.source_fuel_type ?? undefined)
@@ -519,9 +550,20 @@ function estimatedTankCost(row: PersonalSignalRow, profile: UserProfile | null):
 }
 
 function fuelSignalMatchesProfile(row: PersonalSignalRow, profile: UserProfile | null): boolean {
-  if (row.signal_type !== "energy.fuel.liquid.retail_price_regional") return true;
+  if (!isFuelPriceSignal(row.signal_type)) return true;
   if (!profile?.fuelType) return true;
   return fuelTypeMatchesSource(profile.fuelType, row.source_fuel_type ?? undefined);
+}
+
+function isFuelPriceSignal(signalType: string): boolean {
+  return signalType === "energy.fuel.liquid.retail_price_regional" ||
+    signalType === "energy.fuel.station.retail_price";
+}
+
+function serviceModeLabel(value: string | null): string | undefined {
+  if (value === "autoservicio") return "Autoservicio";
+  if (value === "asistido") return "Asistido";
+  return value ?? undefined;
 }
 
 function profileHasLocation(profile: UserProfile | null): profile is UserProfile {
