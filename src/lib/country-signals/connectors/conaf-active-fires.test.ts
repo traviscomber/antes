@@ -42,9 +42,9 @@ describe("CONAF active-fire normalization", () => {
         latitude: -36.3053,
         longitude: -72.7858,
       },
-      severity: undefined,
       qualityState: "validated",
     });
+    expect(observation?.severity).toBeUndefined();
     expect(observation?.normalizedPayload).toMatchObject({
       fireName: "CHORRILLO",
       sourceState: "En combate",
