@@ -14,7 +14,7 @@ export interface SqlExecutor {
 }
 
 const OBSERVATION_BATCH_SIZE = 100;
-const OBSERVATION_COLUMN_COUNT = 26;
+const OBSERVATION_COLUMN_COUNT = 27;
 
 export class NeonCountrySignalStore implements CountrySignalStore {
   constructor(private readonly db: SqlExecutor) {}
@@ -91,6 +91,11 @@ export class NeonCountrySignalStore implements CountrySignalStore {
       const batch = observations.slice(offset, offset + OBSERVATION_BATCH_SIZE);
       if (batch.length === 0) continue;
 
+      // If an immutable observation version appears again in a current snapshot,
+      // record that it is still present at the authority source. This is separate
+      // from ingested_at and is what freshness-sensitive personal alerts use.
+      await this.touchObservationSightings(batch);
+
       const params = batch.flatMap(observationParams);
       const valuesSql = batch
         .map((_, rowIndex) => observationValuePlaceholders(rowIndex))
@@ -98,13 +103,13 @@ export class NeonCountrySignalStore implements CountrySignalStore {
       const rows = await this.db.query<{ id: string }>(
         `insert into external_observations (
           id, source_id, source_record_id, source_dataset, signal_type,
-          observed_at, published_at, ingested_at, valid_from, valid_until,
+          observed_at, published_at, ingested_at, last_seen_at, valid_from, valid_until,
           value_numeric, value_text, value_boolean, unit, severity,
           country_code, region, province, commune, latitude, longitude,
           raw_evidence_ref, normalized_payload, source_url, source_version, quality_state
         ) values
         ${valuesSql}
-        on conflict do nothing
+        on conflict (id) do nothing
         returning id`,
         params,
       );
@@ -115,6 +120,21 @@ export class NeonCountrySignalStore implements CountrySignalStore {
       accepted,
       duplicates: observations.length - accepted,
     };
+  }
+
+  private async touchObservationSightings(observations: ExternalObservation[]): Promise<void> {
+    const params = observations.flatMap((observation) => [observation.id, observation.ingestedAt]);
+    const valuesSql = observations
+      .map((_, index) => `($${index * 2 + 1}::text,$${index * 2 + 2}::timestamptz)`)
+      .join(",");
+
+    await this.db.query(
+      `update external_observations eo
+          set last_seen_at = greatest(eo.last_seen_at, sightings.seen_at)
+         from (values ${valuesSql}) as sightings(id, seen_at)
+        where eo.id = sightings.id`,
+      params,
+    );
   }
 
   async finishIngestionRun(
@@ -183,6 +203,7 @@ function observationParams(observation: ExternalObservation): unknown[] {
     observation.observedAt,
     observation.publishedAt ?? null,
     observation.ingestedAt,
+    observation.ingestedAt,
     observation.validFrom ?? null,
     observation.validUntil ?? null,
     scalar.numeric,
@@ -210,7 +231,7 @@ function observationValuePlaceholders(rowIndex: number): string {
     { length: OBSERVATION_COLUMN_COUNT },
     (_, columnIndex) => `$${first + columnIndex}`,
   );
-  placeholders[22] = `${placeholders[22]}::jsonb`;
+  placeholders[23] = `${placeholders[23]}::jsonb`;
   return `(${placeholders.join(",")})`;
 }
 
