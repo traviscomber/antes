@@ -19,11 +19,43 @@ Una señal pública no es automáticamente un evento. Sin una dependencia verifi
 
 | Fuente | Señal | Acceso | Estado |
 | --- | --- | --- | --- |
+| CONAF — Pronóstico de Riesgo | PI ≥70% geoespacial + resumen diario de humedad de combustible | abierto / ArcGIS GEPRIF | **LIVE** |
 | CNE — Generación Bruta | generación mensual por tecnología y subsistema | abierto / datos.gob.cl | **LIVE** |
 | DGA — Alertas Fluviométricas | alertas Azul, Amarilla y Roja + lectura/umbral | abierto / ArcGIS MOP | **LIVE** |
 | MOP — Emergencias Viales | ruta, tránsito, restricción, gravedad y operatividad | abierto / ArcGIS MOP | **LIVE** |
 | MOP — Pasos Fronterizos | transitabilidad, calzada, clima, cadenas y restricciones | abierto / ArcGIS MOP | **LIVE** |
 | MOP — Emergencias de Infraestructura | degradación de carreteras, puertos, aeropuertos, APR, cauces y otras obras | abierto / ArcGIS MOP | **LIVE** |
+
+### CONAF — Pronóstico de Riesgo
+
+Conector: `cl.conaf.wildfire-forecast`.
+
+El dashboard oficial `Pronóstico de Riesgo` de GEPRIF/CONAF fue resuelto hasta sus servicios públicos ArcGIS. El contrato validado contiene cinco horizontes diarios para:
+
+- `PI/0..4` — probabilidad de ignición;
+- `HC/0..4` — humedad de combustible fino muerto;
+- además expone temperatura, viento y humedad relativa, que no se incorporan todavía a este conector.
+
+ANTEMANO conserva por celda únicamente `PI >= 70%`, porque 70% es el umbral explícito que CONAF utiliza en la definición pública de Botón Rojo. Cada señal mantiene:
+
+- fecha objetivo del pronóstico;
+- porcentaje de PI;
+- FID de la celda;
+- centroide WGS84;
+- polígono original dentro de la evidencia normalizada;
+- vigencia diaria;
+- nivel derivado `warning / high / critical` para priorización interna.
+
+La humedad de combustible no recibe un umbral de alerta inventado por ANTEMANO. Cada horizonte produce un resumen nacional verificable con promedio, mínimo, máximo y conteos descriptivos de celdas `<=6`, `<=8` y `<=10`.
+
+Primera carga productiva verificada el 24 de agosto de 2026:
+
+- **2.293** celdas PI >=70%;
+- **5** resúmenes diarios HC;
+- **2.298** observaciones aceptadas;
+- segunda ejecución: **0 nuevas / 2.298 duplicadas**.
+
+El horizonte observado durante la validación cubría del 23 al 27 de agosto de 2026. La escritura Neon fue cambiada a lotes parametrizados para evitar miles de round-trips individuales y mantener `ON CONFLICT DO NOTHING`.
 
 ### CNE — Generación Bruta
 
@@ -82,36 +114,25 @@ El servidor ArcGIS 10.2 requiere lotes pequeños. ANTEMANO recupera por object I
 
 Carga productiva completa verificada: **4.569** observaciones. Segunda carga completa: **0 nuevas / 4.569 duplicadas**.
 
-## CONAF — integración en validación
-
-CONAF ya está registrada dentro de la Capa País, pero todavía **no se declara LIVE**. ANTEMANO separa alcance público, descubrimiento del backend y contrato de ingesta para no confundir un dashboard visible con una API estable.
-
-### Pronóstico de incendios
-
-Fuente: `cl.conaf.wildfire-forecast`.
-
-Se cubren las señales oficiales de:
-
-- probabilidad de ignición;
-- humedad del combustible fino y muerto.
-
-CONAF publica los mapas de pronóstico los lunes, miércoles y viernes. El código resuelve programáticamente el item público de ArcGIS Online y sus referencias (`item → web map/layer → FeatureServer/MapServer`). La ingesta permanece deshabilitada hasta validar nombres de campos, unidades, geometría, timestamps, vigencia y cobertura del servicio real.
+## CONAF — contratos todavía no habilitados
 
 ### Botón Rojo
 
-Fuente: `cl.conaf.boton-rojo`.
+Fuente registrada: `cl.conaf.boton-rojo`.
 
 CONAF define Botón Rojo cuando coinciden una probabilidad de ignición mayor o igual a 70% y viento mayor o igual a 20 km/h durante la ventana crítica de la tarde. La publicación ofrece proyección de hasta cinco días.
 
-ANTEMANO ya puede auditar el item público de ArcGIS y descubrir servicios vinculados, pero no transforma todavía sus capas en observaciones canónicas hasta verificar el contrato real.
+El item ArcGIS histórico previamente indexado (`41ee3c691359437aa9df2a09d7f6124e`) devolvió `Item does not exist or is inaccessible` tanto desde ArcGIS global como desde el portal GEPRIF durante la validación del 24 de agosto de 2026. La página oficial continúa mostrando el bloque de Botón Rojo y enlaces embebidos, pero ANTEMANO no lo declara LIVE hasta identificar y probar el contrato vigente.
+
+Aunque el dashboard de pronóstico expone también `PI` y `VV`, ANTEMANO no reconstruye por ahora un “Botón Rojo oficial” combinándolos: faltaría demostrar que la capa de viento representa exactamente la ventana operacional 14:00–18:59 usada por CONAF.
 
 ### Incendios activos
 
-Fuente: `cl.conaf.active-fires`.
+Fuente registrada: `cl.conaf.active-fires`.
 
-La página oficial publica situación de incendios con información actualizada cada cinco minutos. El canal observado actualmente está embebido como reporte público y no se ha validado todavía un contrato CONAF/SIDCO estable y machine-readable para uso productivo.
+La página oficial publica la situación de incendios con información actualizada cada cinco minutos y actualmente expone reportes Power BI públicos. Esos embeds son observables, pero todavía no se ha validado un contrato CONAF/SIDCO estable y machine-readable para uso productivo.
 
-**Regla:** no se hará scraping visual ni se declarará una API inferida como fuente oficial. El conector quedará sin ingesta hasta encontrar y probar un endpoint estructurado con trazabilidad suficiente.
+**Regla:** no se hará scraping visual ni se declarará una API inferida como fuente oficial. La ingesta de incendios activos seguirá deshabilitada hasta encontrar y probar un endpoint estructurado con trazabilidad suficiente.
 
 ## Fuentes implementadas que requieren credenciales
 
@@ -148,7 +169,7 @@ Conector para USD/CLP y UF. Requiere `BCCH_BDE_TOKEN`.
 
 ## Próximo radar oficial
 
-Una vez cerrado el contrato productivo de CONAF, la prioridad es:
+Con el primer contrato CONAF productivo ya cerrado, la prioridad es:
 
 1. **Coordinador Eléctrico Nacional** — demanda, generación, transmisión, costos marginales, embalses y combustible;
 2. **SINCA / MMA** — calidad del aire horaria;
