@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireSession } from "@/lib/auth/session";
 import { fuelTypeLabel, getUserProfile } from "@/lib/profile/user-profile";
+import LocationCapture from "./LocationCapture";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,7 @@ const REGIONS = [
 const STATE_MESSAGES: Record<string, string> = {
   saved: "Perfil actualizado.",
   invalid: "Revisa los datos ingresados.",
+  invalid_location: "No fue posible validar la ubicación precisa.",
   unavailable: "No fue posible guardar el perfil.",
 };
 
@@ -38,6 +40,7 @@ export default async function ProfilePage({
   const profile = await getUserProfile(session.userId);
   const params = await searchParams;
   const message = params.state ? STATE_MESSAGES[params.state] : undefined;
+  const hasPreciseLocation = profile?.homeLatitude !== undefined && profile.homeLongitude !== undefined;
 
   return (
     <main className="shell">
@@ -58,12 +61,12 @@ export default async function ProfilePage({
           <p className="eyebrow">EXPOSICIÓN PERSONAL</p>
           <h2>{profile?.homeCommune ?? "Dinos dónde estás."}</h2>
           <p className="lede">
-            ANTEMANO usa tu ubicación y tus preferencias para ordenar señales públicas que realmente pueden afectarte. El perfil personal no crea datos ni modifica el grafo de una empresa.
+            ANTEMANO cruza tu ubicación y tus preferencias con evidencia pública real. La ubicación precisa es opcional y se guarda sólo cuando tú la autorizas.
           </p>
         </div>
         <div className="heroMetrics" aria-label="Perfil personal">
-          <div><strong>{profile?.homeCommune ? "1" : "0"}</strong><span>ubicación</span></div>
-          <div><strong>{profile?.vehicleName ? "1" : "0"}</strong><span>vehículo</span></div>
+          <div><strong>{profile?.homeCommune ? "1" : "0"}</strong><span>comuna</span></div>
+          <div><strong>{hasPreciseLocation ? "1" : "0"}</strong><span>ubicación precisa</span></div>
           <div><strong>{profile?.fuelType ? "1" : "0"}</strong><span>combustible</span></div>
         </div>
       </section>
@@ -74,7 +77,7 @@ export default async function ProfilePage({
             <p className="sectionLabel">PREFERENCIAS</p>
             <h3>Qué te puede afectar</h3>
           </div>
-          <p>Con comuna y región filtramos señales geográficas. Con combustible y estanque podremos convertir precios CNE en costo real para tu auto.</p>
+          <p>Comuna y región dan contexto amplio. La ubicación precisa permite calcular cercanía real. Vehículo y combustible convierten señales de mercado en impacto personal.</p>
         </div>
 
         <form className="profileForm" action="/api/profile" method="post">
@@ -91,6 +94,11 @@ export default async function ProfilePage({
               <span>Comuna</span>
               <input name="homeCommune" type="text" maxLength={120} defaultValue={profile?.homeCommune ?? ""} placeholder="Valdivia" />
             </label>
+
+            <LocationCapture
+              initialLatitude={profile?.homeLatitude}
+              initialLongitude={profile?.homeLongitude}
+            />
 
             <label className="profileField">
               <span>Auto</span>
@@ -129,9 +137,9 @@ export default async function ProfilePage({
 
       <section className="decisionPanel compactDecision">
         <div>
-          <p className="sectionLabel">SIGUIENTE CAPA</p>
-          <h3>Alertas calculadas para cada usuario.</h3>
-          <p>La misma Capa País puede producir resultados distintos para personas distintas según ubicación, vehículo y combustible. La evidencia original permanece igual; cambia sólo la relevancia personal.</p>
+          <p className="sectionLabel">ALERTAS PERSONALES</p>
+          <h3>La misma señal produce resultados distintos para cada usuario.</h3>
+          <p>ANTEMANO conserva una sola evidencia oficial y calcula relevancia por comuna, distancia y preferencias. Cambiar tu perfil recalcula las alertas sin modificar la fuente original.</p>
         </div>
         <span className="statusBadge healthy">PERFIL</span>
       </section>
