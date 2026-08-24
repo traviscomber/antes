@@ -3,6 +3,7 @@ import { getSession, isAdmin } from "@/lib/auth/session";
 import { createCountrySignalConnector } from "@/lib/country-signals/connectors/catalog";
 import { getChileSignalHealth } from "@/lib/country-signals/health";
 import { chileSignalSources } from "@/lib/country-signals/registry";
+import { sourceCoverageLabel } from "@/lib/country-signals/source-coverage";
 import { getSourcePersistenceOverview } from "@/lib/country-signals/source-read-model";
 
 export const dynamic = "force-dynamic";
@@ -125,8 +126,8 @@ export default async function SourcesPage({
             <h3>Fuentes oficiales</h3>
           </div>
           <p>
-            Conector, última ingestión, evidencia almacenada y freshness. Sólo se
-            persisten datos provenientes de la fuente declarada.
+            Conector, cobertura declarada, última ingestión, evidencia almacenada y freshness.
+            Sólo se persisten datos provenientes de la fuente declarada.
           </p>
         </div>
 
@@ -135,6 +136,7 @@ export default async function SourcesPage({
             const live = healthBySource.get(source.id);
             const stored = persistedBySource.get(source.id);
             const connector = createCountrySignalConnector(source.id);
+            const coverage = sourceCoverageLabel(source);
             const canRun =
               admin &&
               Boolean(connector) &&
@@ -161,6 +163,12 @@ export default async function SourcesPage({
                     <dt>Prioridad</dt>
                     <dd>{source.priority}</dd>
                   </div>
+                  {coverage ? (
+                    <div>
+                      <dt>Cobertura</dt>
+                      <dd>{coverage}</dd>
+                    </div>
+                  ) : null}
                   <div>
                     <dt>Persistida</dt>
                     <dd>{stored ? "sí" : "no"}</dd>

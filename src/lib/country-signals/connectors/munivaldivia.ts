@@ -16,9 +16,21 @@ export const muniValdiviaConfig = {
   priority: "P1",
 } as const satisfies MunicipalWordpressConfig;
 
-export const muniValdiviaSource = createMunicipalWordpressSource(muniValdiviaConfig);
+const municipalBaseSource = createMunicipalWordpressSource(muniValdiviaConfig);
+
+export const muniValdiviaSource = {
+  ...municipalBaseSource,
+  coverage: {
+    scope: "territorial",
+    label: "Valdivia, Región de Los Ríos",
+    regions: ["Región de Los Ríos"],
+    communes: ["Valdivia"],
+  },
+} as const;
 
 export class MuniValdiviaOfficialContextConnector extends MunicipalWordpressOfficialContextConnector {
+  readonly source = muniValdiviaSource;
+
   constructor() {
     super(muniValdiviaConfig);
   }

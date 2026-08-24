@@ -42,6 +42,18 @@ export interface GeoReference {
   geometry?: GeoGeometry;
 }
 
+export type SourceCoverage =
+  | {
+      scope: "national";
+      label?: string;
+    }
+  | {
+      scope: "territorial";
+      label: string;
+      regions?: readonly string[];
+      communes?: readonly string[];
+    };
+
 export interface ExternalObservation {
   id: string;
   organizationId: string | null;
@@ -76,6 +88,7 @@ export interface CountrySignalSource {
   priority: "P0" | "P1" | "P2";
   canonicalUrl: string;
   description: string;
+  coverage?: SourceCoverage;
 }
 
 export interface SourceHealth {
