@@ -28,7 +28,7 @@ export const chileSignalSources = [
     name: "LeyChile",
     authority: "Biblioteca del Congreso Nacional de Chile",
     domain: "regulation",
-    authMode: "none",
+    authMode: "api_key",
     cadence: "Daily publication flow",
     priority: "P0",
     canonicalUrl: "https://www.bcn.cl/leychile/",
@@ -55,6 +55,17 @@ export const chileSignalSources = [
     priority: "P1",
     canonicalUrl: "https://si3.bcentral.cl/",
     description: "FX, UF, CPI, rates, trade and macroeconomic context.",
+  },
+  {
+    id: "cl.cne.generacion-bruta",
+    name: "CNE Generación Bruta",
+    authority: "Comisión Nacional de Energía",
+    domain: "energy",
+    authMode: "none",
+    cadence: "Monthly",
+    priority: "P1",
+    canonicalUrl: "https://datos.gob.cl/dataset/generacion-bruta",
+    description: "Official monthly gross electricity generation by technology and subsystem.",
   },
 ] as const satisfies readonly CountrySignalSource[];
 
