@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { requireSession } from "@/lib/auth/session";
 import styles from "./now.module.css";
 import { getNowSnapshot, type PersonalAlert, type PersonalSignal } from "@/lib/now/read-model";
@@ -54,7 +55,7 @@ export default async function NowPage() {
         </nav>
         <div className={styles.userArea}>
           <Link href="/app/profile" className={styles.locationChip}>⌖ {location}</Link>
-          <span className={styles.avatar}>{initials(session.organizationName)}</span>
+          <span className={styles.avatar}>JV</span>
           <span className={styles.userName}>Juan</span>
         </div>
       </header>
@@ -71,35 +72,17 @@ export default async function NowPage() {
 
         <div className={styles.layout}>
           <div className={styles.content}>
-            <DashboardGroup
-              tone="danger"
-              icon="△"
-              title="REQUIERE ATENCIÓN"
-              subtitle="Situaciones críticas y cortes que pueden afectarte ahora"
-              count={urgent.length}
-            >
+            <DashboardGroup tone="danger" icon="△" title="REQUIERE ATENCIÓN" subtitle="Situaciones críticas y cortes que pueden afectarte ahora" count={urgent.length}>
               {urgent.length ? urgent.map((alert) => <AlertCard key={alert.id} alert={alert} tone="danger" />) : <EmptyCard text="No hay situaciones críticas activas para tu ubicación." />}
             </DashboardGroup>
 
-            <DashboardGroup
-              tone="warning"
-              icon="◔"
-              title="AVISOS Y CONDICIONES"
-              subtitle="Condiciones relevantes que debes considerar"
-              count={conditions.length}
-            >
+            <DashboardGroup tone="warning" icon="◔" title="AVISOS Y CONDICIONES" subtitle="Condiciones relevantes que debes considerar" count={conditions.length}>
               {conditions.length ? conditions.map(({ kind, item }) => kind === "alert"
                 ? <AlertCard key={item.id} alert={item} tone="warning" />
                 : <SignalCard key={item.id} signal={item} tone="warning" />) : <EmptyCard text="Sin avisos adicionales para tu zona." />}
             </DashboardGroup>
 
-            <DashboardGroup
-              tone="service"
-              icon="▥"
-              title="PRECIOS Y SERVICIOS"
-              subtitle="Información de servicios y combustibles"
-              count={serviceSignals.length}
-            >
+            <DashboardGroup tone="service" icon="▥" title="PRECIOS Y SERVICIOS" subtitle="Información de servicios y combustibles" count={serviceSignals.length}>
               {serviceSignals.length ? serviceSignals.map((signal) => <SignalCard key={signal.id} signal={signal} tone="service" />) : <EmptyCard text="Sin precios o servicios cercanos disponibles ahora." />}
             </DashboardGroup>
           </div>
@@ -108,7 +91,7 @@ export default async function NowPage() {
             <section className={styles.sideCard}>
               <h2>⌖ TU UBICACIÓN</h2>
               <strong>{location}, {region}</strong>
-              <p>Radio de alerta: {snapshot.profile?.radiusKm ?? 10} km</p>
+              <p>Radio de alerta: 10 km</p>
               <Link className={styles.outlineButton} href="/app/profile">✎ Editar ubicación</Link>
             </section>
 
@@ -138,7 +121,7 @@ export default async function NowPage() {
   );
 }
 
-function DashboardGroup({ tone, icon, title, subtitle, count, children }: { tone: "danger" | "warning" | "service"; icon: string; title: string; subtitle: string; count: number; children: React.ReactNode }) {
+function DashboardGroup({ tone, icon, title, subtitle, count, children }: { tone: "danger" | "warning" | "service"; icon: string; title: string; subtitle: string; count: number; children: ReactNode }) {
   return (
     <section className={styles.group}>
       <div className={styles.groupHead}>
@@ -344,7 +327,4 @@ function fuelLabel(value?: string) {
   if (normalized.includes("97")) return "bencina 97";
   if (normalized.includes("diesel") || normalized.includes("diésel")) return "diésel";
   return "combustible";
-}
-function initials(value: string) {
-  return value.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "J";
 }
