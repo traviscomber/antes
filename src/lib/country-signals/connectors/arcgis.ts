@@ -23,7 +23,7 @@ interface ArcGisFeaturesResponse extends JsonObject {
 }
 
 const USER_AGENT = "N3uralia-ANTEMANO/0.1 (+https://www.antemano.app)";
-const BATCH_SIZE = 250;
+const BATCH_SIZE = 50;
 const MAX_OBJECT_IDS = 10_000;
 
 export async function fetchArcGisFeatureCount(
