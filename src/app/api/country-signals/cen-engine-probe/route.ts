@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -34,64 +35,121 @@ export async function GET() {
 }
 
 async function inspectContract(contract: (typeof CONTRACTS)[number]) {
-  const url = `wss://${QLIK_HOST}/ext/app/${contract.appId}`;
-  try {
-    const client = await QlikRpcClient.connect(url);
+  const identity = randomUUID();
+  const urls = [
+    `wss://${QLIK_HOST}/ext/app/${contract.appId}/identity/${identity}`,
+    `wss://${QLIK_HOST}/ext/app/${contract.appId}`,
+  ];
+  const attempts: Array<Record<string, unknown>> = [];
+
+  for (const url of urls) {
     try {
-      const doc = await client.call(-1, "OpenDoc", [contract.appId, "", "", "", false]);
-      const docHandle = readHandle(doc);
-      if (docHandle === undefined) throw new Error("OpenDoc did not return a document handle.");
+      const client = await QlikRpcClient.connect(url);
+      try {
+        const doc = await client.call(-1, "OpenDoc", [contract.appId, "", "", "", false]);
+        const docHandle = readHandle(doc);
+        if (docHandle === undefined) throw new Error("OpenDoc did not return a document handle.");
 
-      const object = await client.call(docHandle, "GetObject", [contract.objectId]);
-      const objectHandle = readHandle(object);
-      if (objectHandle === undefined) throw new Error("GetObject did not return an object handle.");
+        const object = await client.call(docHandle, "GetObject", [contract.objectId]);
+        const objectHandle = readHandle(object);
+        if (objectHandle === undefined) throw new Error("GetObject did not return an object handle.");
 
-      const layout = await client.call(objectHandle, "GetLayout", []);
-      const hyperCube = nested(layout, ["result", "qLayout", "qHyperCube"]);
-      const cube = isObject(hyperCube) ? hyperCube : undefined;
-      const size = isObject(cube?.qSize) ? cube.qSize : undefined;
-      const pages = Array.isArray(cube?.qDataPages) ? cube.qDataPages : [];
-      const firstPage = pages.find(isObject);
-      const matrix = Array.isArray(firstPage?.qMatrix) ? firstPage.qMatrix : [];
+        const layout = await client.call(objectHandle, "GetLayout", []);
+        const hyperCube = nested(layout, ["result", "qLayout", "qHyperCube"]);
+        const cube = isObject(hyperCube) ? hyperCube : undefined;
+        const size = isObject(cube?.qSize) ? cube.qSize : undefined;
+        const pages = Array.isArray(cube?.qDataPages) ? cube.qDataPages : [];
+        const firstPage = pages.find(isObject);
+        const matrix = Array.isArray(firstPage?.qMatrix) ? firstPage.qMatrix : [];
 
-      return {
-        ...contract,
+        return {
+          ...contract,
+          url,
+          connected: true,
+          attempts,
+          docHandle,
+          objectHandle,
+          layoutTitle:
+            nestedText(layout, ["result", "qLayout", "title"]) ??
+            nestedText(layout, ["result", "qLayout", "qMeta", "title"]),
+          cubeSize: size,
+          dimensions: summarizeInfo(cube?.qDimensionInfo),
+          measures: summarizeInfo(cube?.qMeasureInfo),
+          firstRows: matrix.slice(0, 12).map((row) =>
+            Array.isArray(row)
+              ? row.map((cell) =>
+                  isObject(cell)
+                    ? {
+                        qText: cell.qText,
+                        qNum: cell.qNum,
+                        qElemNumber: cell.qElemNumber,
+                      }
+                    : cell,
+                )
+              : row,
+          ),
+        };
+      } finally {
+        client.close();
+      }
+    } catch (error) {
+      attempts.push({
         url,
-        connected: true,
-        docHandle,
-        objectHandle,
-        layoutTitle: nestedText(layout, ["result", "qLayout", "title"]) ?? nestedText(layout, ["result", "qLayout", "qMeta", "title"]),
-        cubeSize: size,
-        dimensions: summarizeInfo(cube?.qDimensionInfo),
-        measures: summarizeInfo(cube?.qMeasureInfo),
-        firstRows: matrix.slice(0, 12).map((row) =>
-          Array.isArray(row)
-            ? row.map((cell) =>
-                isObject(cell)
-                  ? { qText: cell.qText, qNum: cell.qNum, qElemNumber: cell.qElemNumber }
-                  : cell,
-              )
-            : row,
-        ),
-      };
-    } finally {
-      client.close();
+        error: error instanceof Error ? error.message : "Qlik engine probe failed.",
+      });
     }
-  } catch (error) {
-    return {
-      ...contract,
-      url,
-      connected: false,
-      error: error instanceof Error ? error.message : "Qlik engine probe failed.",
-    };
   }
+
+  const http = await inspectHttpSession(contract.appId);
+  return {
+    ...contract,
+    connected: false,
+    attempts,
+    http,
+  };
+}
+
+async function inspectHttpSession(appId: string) {
+  const resources = await fetch(`https://${QLIK_HOST}/ext/resources/assets/external/requirejs/require.js`, {
+    headers: { Accept: "application/javascript" },
+    cache: "no-store",
+    redirect: "manual",
+    signal: AbortSignal.timeout(12_000),
+  }).catch(() => undefined);
+  const app = await fetch(`https://${QLIK_HOST}/ext/app/${appId}`, {
+    headers: { Accept: "application/json,text/plain,*/*" },
+    cache: "no-store",
+    redirect: "manual",
+    signal: AbortSignal.timeout(12_000),
+  }).catch(() => undefined);
+  return {
+    resources: resources
+      ? {
+          status: resources.status,
+          location: resources.headers.get("location"),
+          setCookie: Boolean(resources.headers.get("set-cookie")),
+        }
+      : null,
+    app: app
+      ? {
+          status: app.status,
+          location: app.headers.get("location"),
+          setCookie: Boolean(app.headers.get("set-cookie")),
+          body: (await app.text()).slice(0, 300),
+        }
+      : null,
+  };
 }
 
 class QlikRpcClient {
   private nextId = 1;
   private readonly pending = new Map<
     number,
-    { resolve: (value: JsonObject) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }
+    {
+      resolve: (value: JsonObject) => void;
+      reject: (error: Error) => void;
+      timer: ReturnType<typeof setTimeout>;
+    }
   >();
 
   private constructor(private readonly socket: WebSocket) {
@@ -105,7 +163,10 @@ class QlikRpcClient {
         clearTimeout(pending.timer);
         this.pending.delete(id);
         if (isObject(message.error)) {
-          const errorMessage = typeof message.error.message === "string" ? message.error.message : JSON.stringify(message.error);
+          const errorMessage =
+            typeof message.error.message === "string"
+              ? message.error.message
+              : JSON.stringify(message.error);
           pending.reject(new Error(errorMessage));
         } else {
           pending.resolve(message);
@@ -127,14 +188,22 @@ class QlikRpcClient {
     const socket = new WebSocket(url);
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error("Qlik WebSocket open timed out.")), 12_000);
-      socket.addEventListener("open", () => {
-        clearTimeout(timer);
-        resolve();
-      }, { once: true });
-      socket.addEventListener("error", () => {
-        clearTimeout(timer);
-        reject(new Error("Qlik WebSocket connection failed."));
-      }, { once: true });
+      socket.addEventListener(
+        "open",
+        () => {
+          clearTimeout(timer);
+          resolve();
+        },
+        { once: true },
+      );
+      socket.addEventListener(
+        "error",
+        () => {
+          clearTimeout(timer);
+          reject(new Error("Qlik WebSocket connection failed."));
+        },
+        { once: true },
+      );
     });
     return new QlikRpcClient(socket);
   }
