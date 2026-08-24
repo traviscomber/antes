@@ -65,32 +65,53 @@ export async function GET() {
   );
   const breakdown = await sql.query(
     `select
-       source_id,
-       signal_type,
-       level,
+       pa.source_id,
+       pa.signal_type,
+       pa.level,
        count(*)::int as alerts,
-       round(min(distance_km)::numeric, 1) as nearest_km,
-       max(last_seen_at) as last_seen_at
-     from personal_alerts
-     where user_id = $1 and state = 'active'
-     group by source_id, signal_type, level
-     order by alerts desc, source_id, signal_type, level`,
+       round(min(pa.distance_km)::numeric, 1) as nearest_km,
+       max(pa.last_seen_at) as last_seen_at
+     from personal_alerts pa
+     where pa.user_id = $1 and pa.state = 'active'
+     group by pa.source_id, pa.signal_type, pa.level
+     order by alerts desc, pa.source_id, pa.signal_type, pa.level`,
+    [userId],
+  );
+  const mopServices = await sql.query(
+    `select
+       coalesce(eo.normalized_payload ->> 'mopService', '(sin servicio)') as mop_service,
+       coalesce(eo.normalized_payload ->> 'affectedInfrastructure', '(sin infraestructura)') as affected_infrastructure,
+       pa.level,
+       count(*)::int as alerts,
+       round(min(pa.distance_km)::numeric, 1) as nearest_km
+     from personal_alerts pa
+     join external_observations eo on eo.id = pa.observation_id
+     where pa.user_id = $1
+       and pa.state = 'active'
+       and pa.source_id = 'cl.mop.emergencias-infraestructura'
+     group by 1,2,3
+     order by alerts desc, mop_service, affected_infrastructure`,
     [userId],
   );
   const samples = await sql.query(
     `select
-       source_id,
-       signal_type,
-       level,
-       round(distance_km::numeric, 1) as distance_km,
-       reason,
-       impact
-     from personal_alerts
-     where user_id = $1 and state = 'active'
+       pa.source_id,
+       pa.signal_type,
+       pa.level,
+       round(pa.distance_km::numeric, 1) as distance_km,
+       pa.reason,
+       eo.normalized_payload ->> 'mopService' as mop_service,
+       eo.normalized_payload ->> 'affectedInfrastructure' as affected_infrastructure,
+       eo.normalized_payload ->> 'roadRole' as road_role,
+       eo.normalized_payload ->> 'emergency' as emergency,
+       pa.impact
+     from personal_alerts pa
+     join external_observations eo on eo.id = pa.observation_id
+     where pa.user_id = $1 and pa.state = 'active'
      order by
-       case level when 'critical' then 0 when 'warning' then 1 else 2 end,
-       distance_km nulls last,
-       source_id
+       case pa.level when 'critical' then 0 when 'warning' then 1 else 2 end,
+       pa.distance_km nulls last,
+       pa.source_id
      limit 30`,
     [userId],
   );
@@ -100,6 +121,7 @@ export async function GET() {
     refresh,
     counts: counts[0] ?? null,
     breakdown,
+    mopServices,
     samples,
   });
 }
