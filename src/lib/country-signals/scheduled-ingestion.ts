@@ -1,7 +1,7 @@
 import { createCountrySignalConnector } from "./connectors/catalog";
 import { runCountrySignalIngestion } from "./ingestion";
 import { createNeonCountrySignalStore } from "./neon-store";
-import { refreshPersonalAlertsForAllUsers } from "@/lib/profile/personal-alerts";
+import { refreshPersonalAlertsForAllUsersWithWater } from "@/lib/profile/personal-alerts-water-service";
 
 export type ScheduledSourceResult = {
   sourceId: string;
@@ -22,7 +22,7 @@ export type ScheduledIngestionSummary = {
   accepted: number;
   duplicates: number;
   results: ScheduledSourceResult[];
-  personalAlerts?: Awaited<ReturnType<typeof refreshPersonalAlertsForAllUsers>>;
+  personalAlerts?: Awaited<ReturnType<typeof refreshPersonalAlertsForAllUsersWithWater>>;
   personalAlertError?: string;
 };
 
@@ -71,13 +71,13 @@ export async function runScheduledCountrySignalIngestion(
   );
 
   let personalAlerts:
-    | Awaited<ReturnType<typeof refreshPersonalAlertsForAllUsers>>
+    | Awaited<ReturnType<typeof refreshPersonalAlertsForAllUsersWithWater>>
     | undefined;
   let personalAlertError: string | undefined;
 
   if (results.some((result) => result.state !== "failed")) {
     try {
-      personalAlerts = await refreshPersonalAlertsForAllUsers();
+      personalAlerts = await refreshPersonalAlertsForAllUsersWithWater();
     } catch (error) {
       personalAlertError = publicError(error);
     }
