@@ -1,5 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
-  "outputDirectory": null
+  "outputDirectory": null,
+  "crons": [
+    {
+      "path": "/api/cron/country-signals",
+      "schedule": "*/5 * * * *"
+    }
+  ]
 }
