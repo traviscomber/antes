@@ -276,7 +276,10 @@ function scriptVariable(value: string, variable: string): string | undefined {
 
 function localizedNumber(value: string | undefined): number | undefined {
   if (!value?.trim()) return undefined;
-  const normalized = value.trim().replace(/\./g, "").replace(",", ".");
+  const clean = value.trim().replace(/\s+/g, "");
+  const normalized = clean.includes(",")
+    ? clean.replace(/\./g, "").replace(",", ".")
+    : clean;
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : undefined;
 }
