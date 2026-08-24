@@ -1,0 +1,263 @@
+import { createHash, randomBytes } from "node:crypto";
+import { neon } from "@neondatabase/serverless";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+
+const SESSION_COOKIE = "antemano_session";
+const SESSION_TTL_SECONDS = 8 * 60 * 60;
+const LOGIN_WINDOW_MINUTES = 15;
+const MAX_FAILED_ATTEMPTS = 8;
+
+export type AppRole = "viewer" | "operator" | "decision_maker" | "admin";
+
+export interface AuthIdentity {
+  userId: string;
+  email: string;
+  displayName: string | null;
+  membershipId: string;
+  organizationId: string;
+  organizationName: string;
+  role: AppRole;
+}
+
+export interface AuthSession extends AuthIdentity {
+  sessionId: string;
+  expiresAt: string;
+}
+
+type DbRow = Record<string, unknown>;
+
+function db() {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    throw new Error("DATABASE_URL is required for authentication.");
+  }
+
+  const sql = neon(databaseUrl);
+  return {
+    query: async <T extends DbRow>(text: string, params: unknown[] = []) =>
+      (await sql.query(text, params)) as T[],
+  };
+}
+
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+function tokenHash(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+export async function isLoginThrottled(email: string): Promise<boolean> {
+  const emailKey = normalizeEmail(email);
+  if (!emailKey) return false;
+
+  const rows = await db().query<{ attempts: number }>(
+    `select count(*)::int as attempts
+       from auth_login_attempts
+      where email_key = $1
+        and attempted_at > now() - make_interval(mins => $2)`,
+    [emailKey, LOGIN_WINDOW_MINUTES],
+  );
+
+  return (rows[0]?.attempts ?? 0) >= MAX_FAILED_ATTEMPTS;
+}
+
+export async function recordFailedLogin(email: string): Promise<void> {
+  const emailKey = normalizeEmail(email);
+  if (!emailKey) return;
+
+  await db().query(
+    `insert into auth_login_attempts (email_key) values ($1)`,
+    [emailKey],
+  );
+}
+
+export async function clearLoginFailures(email: string): Promise<void> {
+  const emailKey = normalizeEmail(email);
+  if (!emailKey) return;
+
+  await db().query(
+    `delete from auth_login_attempts
+      where email_key = $1
+         or attempted_at < now() - interval '1 day'`,
+    [emailKey],
+  );
+}
+
+export async function authenticateUser(
+  email: string,
+  password: string,
+): Promise<AuthIdentity | null> {
+  const emailKey = normalizeEmail(email);
+  if (!emailKey || !password) return null;
+
+  const rows = await db().query<{
+    user_id: string;
+    email: string;
+    display_name: string | null;
+    membership_id: string;
+    organization_id: string;
+    organization_name: string;
+    role: AppRole;
+  }>(
+    `select
+       u.id::text as user_id,
+       u.email,
+       u.display_name,
+       m.id::text as membership_id,
+       m.organization_id,
+       o.name as organization_name,
+       m.role
+     from app_users u
+     join organization_memberships m on m.user_id = u.id
+     join organizations o on o.id = m.organization_id
+     where u.email = $1
+       and u.status = 'active'
+       and m.status = 'active'
+       and u.password_hash = crypt($2, u.password_hash)
+     order by case m.role when 'admin' then 0 else 1 end, m.created_at
+     limit 1`,
+    [emailKey, password],
+  );
+
+  const row = rows[0];
+  if (!row) return null;
+
+  await db().query(
+    `update app_users set last_login_at = now(), updated_at = now() where id = $1`,
+    [row.user_id],
+  );
+
+  return {
+    userId: row.user_id,
+    email: row.email,
+    displayName: row.display_name,
+    membershipId: row.membership_id,
+    organizationId: row.organization_id,
+    organizationName: row.organization_name,
+    role: row.role,
+  };
+}
+
+export async function createSession(identity: AuthIdentity): Promise<string> {
+  const token = randomBytes(32).toString("base64url");
+  const hash = tokenHash(token);
+  const expiresAt = new Date(Date.now() + SESSION_TTL_SECONDS * 1000);
+
+  await db().query(
+    `insert into auth_sessions (
+       token_hash, membership_id, user_id, organization_id, expires_at
+     ) values ($1,$2,$3,$4,$5)`,
+    [
+      hash,
+      identity.membershipId,
+      identity.userId,
+      identity.organizationId,
+      expiresAt.toISOString(),
+    ],
+  );
+
+  return token;
+}
+
+export async function setSessionCookie(token: string): Promise<void> {
+  const store = await cookies();
+  store.set(SESSION_COOKIE, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_TTL_SECONDS,
+  });
+}
+
+export async function clearSessionCookie(): Promise<void> {
+  const store = await cookies();
+  store.set(SESSION_COOKIE, "", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 0,
+  });
+}
+
+export async function getSession(): Promise<AuthSession | null> {
+  const store = await cookies();
+  const token = store.get(SESSION_COOKIE)?.value;
+  if (!token) return null;
+
+  const rows = await db().query<{
+    session_id: string;
+    expires_at: string | Date;
+    user_id: string;
+    email: string;
+    display_name: string | null;
+    membership_id: string;
+    organization_id: string;
+    organization_name: string;
+    role: AppRole;
+  }>(
+    `select
+       s.id::text as session_id,
+       s.expires_at,
+       u.id::text as user_id,
+       u.email,
+       u.display_name,
+       m.id::text as membership_id,
+       m.organization_id,
+       o.name as organization_name,
+       m.role
+     from auth_sessions s
+     join app_users u on u.id = s.user_id
+     join organization_memberships m
+       on m.id = s.membership_id
+      and m.user_id = s.user_id
+      and m.organization_id = s.organization_id
+     join organizations o on o.id = s.organization_id
+     where s.token_hash = $1
+       and s.revoked_at is null
+       and s.expires_at > now()
+       and u.status = 'active'
+       and m.status = 'active'
+     limit 1`,
+    [tokenHash(token)],
+  );
+
+  const row = rows[0];
+  if (!row) return null;
+
+  return {
+    sessionId: row.session_id,
+    expiresAt: new Date(row.expires_at).toISOString(),
+    userId: row.user_id,
+    email: row.email,
+    displayName: row.display_name,
+    membershipId: row.membership_id,
+    organizationId: row.organization_id,
+    organizationName: row.organization_name,
+    role: row.role,
+  };
+}
+
+export async function revokeCurrentSession(): Promise<void> {
+  const store = await cookies();
+  const token = store.get(SESSION_COOKIE)?.value;
+  if (!token) return;
+
+  await db().query(
+    `update auth_sessions set revoked_at = now() where token_hash = $1 and revoked_at is null`,
+    [tokenHash(token)],
+  );
+}
+
+export async function requireSession(): Promise<AuthSession> {
+  const session = await getSession();
+  if (!session) redirect("/login");
+  return session;
+}
+
+export function isAdmin(session: AuthSession | null): boolean {
+  return session?.role === "admin";
+}
