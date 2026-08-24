@@ -28,38 +28,73 @@ const DGA_STATIONS_LAYER =
 
 export class DgaDirectAlertsConnector implements CountrySignalConnector {
   readonly source = DGA_SOURCE;
-  readonly parserVersion = "dga-alertas-arcgis+hidrolinea@5";
+  readonly parserVersion = "dga-alertas-arcgis+hidrolinea@6";
 
   async healthCheck(): Promise<SourceHealth> {
     const checkedAt = new Date().toISOString();
     const startedAt = Date.now();
-    try {
-      const count = await fetchArcGisFeatureCount(DGA_READINGS_TABLE);
+    const [arcgis, hidrolinea] = await Promise.allSettled([
+      fetchArcGisFeatureCount(DGA_READINGS_TABLE),
+      fetchMonitoredHidrolineaObservations(checkedAt, this.parserVersion),
+    ]);
+
+    const arcgisOk = arcgis.status === "fulfilled";
+    const hidrolineaOk = hidrolinea.status === "fulfilled";
+    if (!arcgisOk && !hidrolineaOk) {
       return {
         sourceId: this.source.id,
-        state: count > 0 ? "healthy" : "degraded",
+        state: "unavailable",
         checkedAt,
         latencyMs: Date.now() - startedAt,
-        message: `${count} DGA alert-view rows available. Scheduled ingestion also reads configured continuous HIDROLínea stations; that live contract is reflected by ingestion-run health rather than this lightweight probe.`,
+        message: `DGA ArcGIS unavailable: ${settledError(arcgis)}; HIDROLínea unavailable: ${settledError(hidrolinea)}.`,
       };
-    } catch (error) {
-      return failureHealth(this.source.id, checkedAt, startedAt, error);
     }
+
+    const count = arcgisOk ? arcgis.value : undefined;
+    const continuous = hidrolineaOk ? hidrolinea.value.length : undefined;
+    const degraded = !arcgisOk || !hidrolineaOk;
+    return {
+      sourceId: this.source.id,
+      state: degraded ? "degraded" : "healthy",
+      checkedAt,
+      latencyMs: Date.now() - startedAt,
+      message: [
+        arcgisOk
+          ? `${count} DGA alert-view rows available`
+          : `DGA ArcGIS alert view unavailable (${settledError(arcgis)})`,
+        hidrolineaOk
+          ? `${continuous} configured HIDROLínea continuous-flow observations available`
+          : `HIDROLínea unavailable (${settledError(hidrolinea)})`,
+      ].join("; ") + ".",
+    };
   }
 
   async ingest(): Promise<IngestionBatch> {
     const fetchedAt = new Date().toISOString();
     const startedAt = Date.now();
-    const [readings, stations, hidrolineaResult] = await Promise.all([
+    const [readingsResult, stationsResult, hidrolineaResult] = await Promise.allSettled([
       fetchArcGisFeatures(DGA_READINGS_TABLE),
       fetchArcGisFeatures(DGA_STATIONS_LAYER),
-      fetchMonitoredHidrolineaObservations(fetchedAt, this.parserVersion)
-        .then((observations) => ({ observations, error: undefined as string | undefined }))
-        .catch((error: unknown) => ({
-          observations: [] as ExternalObservation[],
-          error: publicError(error),
-        })),
+      fetchMonitoredHidrolineaObservations(fetchedAt, this.parserVersion),
     ]);
+
+    const readings = readingsResult.status === "fulfilled" ? readingsResult.value : [];
+    const stations = stationsResult.status === "fulfilled" ? stationsResult.value : [];
+    const hidrolinea = hidrolineaResult.status === "fulfilled" ? hidrolineaResult.value : [];
+
+    // DGA's alert map (rest-sit.mop.gob.cl) and HIDROLínea (snia.mop.gob.cl)
+    // are independent operational surfaces. A transient ArcGIS outage must not
+    // suppress continuous Pupunahue flow monitoring, and a HIDROLínea failure
+    // must not suppress official alert rows that are still available.
+    if (
+      readingsResult.status === "rejected" &&
+      stationsResult.status === "rejected" &&
+      hidrolineaResult.status === "rejected"
+    ) {
+      throw new Error(
+        `All DGA hydrometric contracts unavailable: readings=${settledError(readingsResult)}; stations=${settledError(stationsResult)}; hidrolinea=${settledError(hidrolineaResult)}`,
+      );
+    }
 
     const stationsByCode = new Map<string, (typeof stations)[number]>();
     for (const station of stations) {
@@ -69,7 +104,7 @@ export class DgaDirectAlertsConnector implements CountrySignalConnector {
 
     let joinedWithStation = 0;
     let activeAlertRows = 0;
-    const observations: ExternalObservation[] = [];
+    const alertObservations: ExternalObservation[] = [];
 
     for (const reading of readings) {
       const alertIndicator = arcGisNumber(reading.attributes, "mod_indale");
@@ -93,7 +128,7 @@ export class DgaDirectAlertsConnector implements CountrySignalConnector {
       );
       if (!observation) continue;
 
-      observations.push({
+      alertObservations.push({
         ...observation,
         rawEvidenceRef: arcGisEvidenceUrl(DGA_READINGS_TABLE),
         normalizedPayload: {
@@ -104,11 +139,18 @@ export class DgaDirectAlertsConnector implements CountrySignalConnector {
       });
     }
 
-    observations.push(...hidrolineaResult.observations);
-    const degraded = Boolean(hidrolineaResult.error);
-    const continuousMessage = degraded
-      ? `continuous HIDROLínea monitoring degraded: ${hidrolineaResult.error}`
-      : `${hidrolineaResult.observations.length} configured HIDROLínea continuous-flow observations normalized`;
+    const observations = [...alertObservations, ...hidrolinea];
+    const errors = [
+      readingsResult.status === "rejected"
+        ? `alert readings unavailable: ${settledError(readingsResult)}`
+        : undefined,
+      stationsResult.status === "rejected"
+        ? `station metadata unavailable: ${settledError(stationsResult)}`
+        : undefined,
+      hidrolineaResult.status === "rejected"
+        ? `continuous HIDROLínea unavailable: ${settledError(hidrolineaResult)}`
+        : undefined,
+    ].filter((value): value is string => Boolean(value));
 
     return {
       sourceId: this.source.id,
@@ -117,10 +159,16 @@ export class DgaDirectAlertsConnector implements CountrySignalConnector {
       observations,
       sourceHealth: {
         sourceId: this.source.id,
-        state: degraded ? "degraded" : "healthy",
+        state: errors.length > 0 ? "degraded" : "healthy",
         checkedAt: fetchedAt,
         latencyMs: Date.now() - startedAt,
-        message: `${activeAlertRows} active DGA alert rows found; ${observations.length - hidrolineaResult.observations.length} alert observations normalized and ${joinedWithStation} matched to station metadata; ${continuousMessage}.`,
+        message: [
+          `${activeAlertRows} active DGA alert rows found`,
+          `${alertObservations.length} alert observations normalized`,
+          `${joinedWithStation} matched to station metadata`,
+          `${hidrolinea.length} HIDROLínea continuous-flow observations normalized`,
+          ...(errors.length > 0 ? [`degraded contracts: ${errors.join("; ")}`] : []),
+        ].join("; ") + ".",
       },
     };
   }
@@ -204,6 +252,10 @@ function failureHealth(
     latencyMs: Date.now() - startedAt,
     message: publicError(error),
   };
+}
+
+function settledError(result: PromiseSettledResult<unknown>): string {
+  return result.status === "rejected" ? publicError(result.reason) : "none";
 }
 
 function publicError(error: unknown): string {
