@@ -6,6 +6,10 @@
     {
       "path": "/api/cron/country-signals",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/country-signals-operational",
+      "schedule": "*/15 * * * *"
     }
   ]
 }
