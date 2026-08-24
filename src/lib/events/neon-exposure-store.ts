@@ -97,6 +97,40 @@ export class NeonExposureStore {
     }
   }
 
+  async recordEvaluation(input: {
+    organizationId: string;
+    observationId: string;
+    evaluatorVersion: string;
+    matchCount: number;
+  }): Promise<void> {
+    const outcome = input.matchCount > 0 ? "matched" : "no_match";
+    const id = stableObservationId([
+      "observation-evaluation",
+      input.organizationId,
+      input.observationId,
+      input.evaluatorVersion,
+    ]);
+
+    await this.db.query(
+      `insert into observation_evaluations (
+         id, organization_id, observation_id, evaluator_version,
+         outcome, match_count, evaluated_at
+       ) values ($1,$2,$3,$4,$5,$6,now())
+       on conflict (organization_id,observation_id,evaluator_version) do update set
+         outcome=excluded.outcome,
+         match_count=excluded.match_count,
+         evaluated_at=now()`,
+      [
+        id,
+        input.organizationId,
+        input.observationId,
+        input.evaluatorVersion,
+        outcome,
+        input.matchCount,
+      ],
+    );
+  }
+
   async upsertMatches(matches: ObservationMatch[]): Promise<void> {
     for (const match of matches) {
       const id = stableObservationId([
