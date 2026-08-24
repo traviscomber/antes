@@ -7,6 +7,7 @@ import {
 } from "./personal-alerts";
 
 const SOURCE_ID = "cl.aguas-decima.water-interruptions";
+const SOURCE_NAME = "Aguas Décima";
 const WATER_ALERT_KEYS = [
   "water:service:current",
   "water:service:emergency",
@@ -36,6 +37,8 @@ type ObservationRow = {
   valid_until: string | Date | null;
   value_numeric: number | null;
   severity: string | null;
+  region: string | null;
+  commune: string | null;
   normalized_payload: unknown;
   raw_evidence_ref: string;
 };
@@ -70,7 +73,7 @@ async function projectWaterServiceAlerts(database: SqlExecutor): Promise<Persona
     database.query<UserRow>(
       `select user_id::text as user_id, home_commune, home_region
          from user_profiles
-        where lower(trim(coalesce(home_commune, ''))) = 'valdivia'
+        where home_commune is not null
         order by updated_at desc
         limit $1`,
       [MAX_USERS_PER_PASS],
@@ -78,10 +81,14 @@ async function projectWaterServiceAlerts(database: SqlExecutor): Promise<Persona
     loadCurrentWaterObservations(database),
   ]);
 
-  const decisions = buildWaterDecisions(observations);
   let activeAlerts = 0;
 
   for (const user of users) {
+    const matching = observations.filter((observation) =>
+      samePlace(observation.commune, user.home_commune),
+    );
+    const decisions = buildWaterDecisions(matching, user.home_commune ?? "tu comuna");
+
     for (const decision of decisions) {
       const id = personalAlertId(user.user_id, decision.alertKey);
       const payload = object(decision.observation.normalized_payload);
@@ -89,6 +96,8 @@ async function projectWaterServiceAlerts(database: SqlExecutor): Promise<Persona
         observationId: item.id,
         sourceRecordId: item.source_record_id,
         signalType: item.signal_type,
+        region: item.region,
+        commune: item.commune,
         sector: stringValue(object(item.normalized_payload).sector),
         clientsAffected: item.value_numeric,
         startAt: isoOrUndefined(item.valid_from),
@@ -129,12 +138,12 @@ async function projectWaterServiceAlerts(database: SqlExecutor): Promise<Persona
           PERSONAL_ALERT_RULE_VERSION,
           decision.reason,
           JSON.stringify({
-            sourceName: "Aguas Décima — Eventos en la vía pública",
+            sourceName: `${SOURCE_NAME} — Eventos de servicio`,
             sourceRecordId: decision.observation.source_record_id,
             observedAt: iso(decision.observation.observed_at),
             lastSeenAt: iso(decision.observation.last_seen_at),
-            region: user.home_region ?? "Región de Los Ríos",
-            commune: user.home_commune ?? "Valdivia",
+            region: decision.observation.region ?? user.home_region,
+            commune: decision.observation.commune ?? user.home_commune,
             distanceKm: null,
             value: decision.observation.value_numeric,
             unit: decision.observation.value_numeric === null ? null : "affected_customers",
@@ -171,20 +180,21 @@ async function loadCurrentWaterObservations(database: SqlExecutor): Promise<Obse
        select
          eo.id, eo.source_record_id, eo.signal_type, eo.observed_at, eo.last_seen_at,
          eo.valid_from, eo.valid_until, eo.value_numeric, eo.severity,
-         eo.normalized_payload, eo.raw_evidence_ref,
+         eo.region, eo.commune, eo.normalized_payload, eo.raw_evidence_ref,
          row_number() over (
            partition by eo.source_id, coalesce(eo.source_record_id, eo.id)
            order by eo.last_seen_at desc, eo.ingested_at desc, eo.observed_at desc, eo.id desc
          ) as version_rank
        from external_observations eo
        where eo.source_id = $1
-         and lower(trim(coalesce(eo.commune, ''))) = 'valdivia'
      )
      select
        id, source_record_id, signal_type, observed_at, last_seen_at,
-       valid_from, valid_until, value_numeric, severity, normalized_payload, raw_evidence_ref
+       valid_from, valid_until, value_numeric, severity, region, commune,
+       normalized_payload, raw_evidence_ref
      from latest
      where version_rank = 1
+       and commune is not null
        and (
          (signal_type in ('water.service.interruption.current','water.service.interruption.emergency','water.service.low_pressure.current')
           and last_seen_at >= now() - interval '2 hours'
@@ -201,7 +211,7 @@ async function loadCurrentWaterObservations(database: SqlExecutor): Promise<Obse
   );
 }
 
-function buildWaterDecisions(rows: ObservationRow[]): WaterDecision[] {
+function buildWaterDecisions(rows: ObservationRow[], commune: string): WaterDecision[] {
   const current = rows.filter((row) => row.signal_type === "water.service.interruption.current");
   const emergency = rows.filter((row) => row.signal_type === "water.service.interruption.emergency");
   const scheduled = rows.filter((row) => row.signal_type === "water.service.interruption.scheduled");
@@ -213,7 +223,7 @@ function buildWaterDecisions(rows: ObservationRow[]): WaterDecision[] {
       alertKey: "water:service:emergency",
       level: "warning",
       observation: representative(emergency),
-      reason: groupedReason("emergency", emergency),
+      reason: groupedReason("emergency", emergency, commune),
       members: emergency,
     });
   }
@@ -222,7 +232,7 @@ function buildWaterDecisions(rows: ObservationRow[]): WaterDecision[] {
       alertKey: "water:service:current",
       level: "warning",
       observation: representative(current),
-      reason: groupedReason("current", current),
+      reason: groupedReason("current", current, commune),
       members: current,
     });
   }
@@ -231,7 +241,7 @@ function buildWaterDecisions(rows: ObservationRow[]): WaterDecision[] {
       alertKey: "water:service:low-pressure",
       level: "warning",
       observation: representative(lowPressure),
-      reason: groupedReason("low_pressure", lowPressure),
+      reason: groupedReason("low_pressure", lowPressure, commune),
       members: lowPressure,
     });
   }
@@ -243,35 +253,40 @@ function buildWaterDecisions(rows: ObservationRow[]): WaterDecision[] {
       alertKey: "water:service:scheduled",
       level: hoursUntil !== undefined && hoursUntil <= 12 ? "warning" : "watch",
       observation: first,
-      reason: groupedReason("scheduled", scheduled),
+      reason: groupedReason("scheduled", scheduled, commune),
       members: scheduled,
     });
   }
   return decisions;
 }
 
-function groupedReason(kind: "current" | "emergency" | "scheduled" | "low_pressure", rows: ObservationRow[]): string {
+function groupedReason(
+  kind: "current" | "emergency" | "scheduled" | "low_pressure",
+  rows: ObservationRow[],
+  commune: string,
+): string {
   const first = representative(rows);
   const payload = object(first.normalized_payload);
   const sector = stringValue(payload.sector);
   const clients = rows.reduce((sum, row) => sum + Math.max(0, Math.round(row.value_numeric ?? 0)), 0);
   const count = rows.length;
   const clientText = clients > 0 ? `; ${clients} clientes informados` : "";
+  const place = commune.trim() || "tu comuna";
 
   if (kind === "emergency") {
-    return `Aguas Décima informa ${count === 1 ? "un corte de emergencia" : `${count} cortes de emergencia`} en Valdivia${sector ? `, sector ${sector}` : ""}${clientText}.`;
+    return `${SOURCE_NAME} informa ${count === 1 ? "un corte de emergencia" : `${count} cortes de emergencia`} en ${place}${sector ? `, sector ${sector}` : ""}${clientText}.`;
   }
   if (kind === "current") {
-    return `Aguas Décima informa ${count === 1 ? "una interrupción de agua en proceso" : `${count} interrupciones de agua en proceso`} en Valdivia${sector ? `, sector ${sector}` : ""}${clientText}.`;
+    return `${SOURCE_NAME} informa ${count === 1 ? "una interrupción de agua en proceso" : `${count} interrupciones de agua en proceso`} en ${place}${sector ? `, sector ${sector}` : ""}${clientText}.`;
   }
   if (kind === "low_pressure") {
-    return `Aguas Décima informa ${count === 1 ? "un evento de baja presión de agua" : `${count} eventos de baja presión de agua`} en Valdivia${sector ? `, sector ${sector}` : ""}.`;
+    return `${SOURCE_NAME} informa ${count === 1 ? "un evento de baja presión de agua" : `${count} eventos de baja presión de agua`} en ${place}${sector ? `, sector ${sector}` : ""}.`;
   }
 
   const start = time(first.valid_from);
   const hoursUntil = start === undefined ? undefined : Math.max(0, start - Date.now()) / 3_600_000;
   const timing = hoursUntil === undefined ? "" : `; la próxima comienza en ${Math.max(1, Math.round(hoursUntil))} h`;
-  return `Aguas Décima informa ${count === 1 ? "un corte de agua programado" : `${count} cortes de agua programados`} en Valdivia${sector ? `, sector ${sector}` : ""}${timing}${clientText}.`;
+  return `${SOURCE_NAME} informa ${count === 1 ? "un corte de agua programado" : `${count} cortes de agua programados`} en ${place}${sector ? `, sector ${sector}` : ""}${timing}${clientText}.`;
 }
 
 async function countActiveWaterAlerts(database: SqlExecutor): Promise<number> {
@@ -293,6 +308,22 @@ function representative(rows: ObservationRow[]): ObservationRow {
     const bStart = time(b.valid_from) ?? time(b.observed_at) ?? Number.POSITIVE_INFINITY;
     return aStart - bStart;
   })[0];
+}
+
+function samePlace(left: string | null, right: string | null): boolean {
+  const a = normalizePlace(left);
+  const b = normalizePlace(right);
+  return Boolean(a && b && a === b);
+}
+
+function normalizePlace(value: string | null): string | undefined {
+  if (!value?.trim()) return undefined;
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
 }
 
 function createDb(): SqlExecutor {
