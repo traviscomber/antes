@@ -13,6 +13,17 @@ export const chileSignalSources = [
     description: "Weather observations and regional WRF forecast signals.",
   },
   {
+    id: "cl.mma.sinca-air-quality",
+    name: "SINCA Calidad del Aire en Línea",
+    authority: "Ministerio del Medio Ambiente",
+    domain: "environment",
+    authMode: "none",
+    cadence: "Hourly online update",
+    priority: "P0",
+    canonicalUrl: "https://sinca.mma.gob.cl/index.php/json/listadomapa2k19/",
+    description: "Current online air-quality indicators from SINCA stations, preserved as provisional until MMA validation.",
+  },
+  {
     id: "cl.mtt.observatorio-logistico",
     name: "Observatorio Logístico",
     authority: "Ministerio de Transportes y Telecomunicaciones",
