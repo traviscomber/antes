@@ -17,12 +17,14 @@ import {
   MopAllInfrastructureEmergenciesConnector,
 } from "./connectors/mop-live-overrides";
 import { ObservatorioLogisticoConnector } from "./connectors/observatorio-logistico";
+import { SincaAirQualityConnector } from "./connectors/sinca";
 import { chileSignalSources } from "./registry";
 import type { SourceHealth } from "./types";
 
 export async function getChileSignalHealth(): Promise<SourceHealth[]> {
   const connectors = [
     new DmcWrfConnector(),
+    new SincaAirQualityConnector(),
     new ObservatorioLogisticoConnector(),
     new LeyChileConnector(),
     new DgaDirectAlertsConnector(),
