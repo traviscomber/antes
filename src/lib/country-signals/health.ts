@@ -20,6 +20,7 @@ import {
   MopAllInfrastructureEmergenciesConnector,
 } from "./connectors/mop-live-overrides";
 import { ObservatorioLogisticoConnector } from "./connectors/observatorio-logistico";
+import { OdepaWholesaleProduceConnector } from "./connectors/odepa-wholesale";
 import { SincaAirQualityConnector } from "./connectors/sinca";
 import { chileSignalSources } from "./registry";
 import type { SourceHealth } from "./types";
@@ -39,6 +40,7 @@ export async function getChileSignalHealth(): Promise<SourceHealth[]> {
     new ConafActiveFiresConnector(),
     ...cenSipSourceIds.map((sourceId) => createCenSipConnector(sourceId)),
     new BancoCentralConnector(),
+    new OdepaWholesaleProduceConnector(),
     ...cneFuelSourceIds.map((sourceId) => createCneFuelConnector(sourceId)),
     new CneGenerationConnector(),
   ];
