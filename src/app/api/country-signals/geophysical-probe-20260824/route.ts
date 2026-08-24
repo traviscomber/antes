@@ -9,11 +9,21 @@ const CSN = "https://www.sismologia.cl/";
 const SERNAGEOMIN_SEARCH = "https://www.sernageomin.cl/?s=alerta+tecnica+volcan";
 
 export async function GET() {
-  const [csn, sernageomin] = await Promise.all([
+  const [csn, sernageomin] = await Promise.allSettled([
     inspectCsn(),
     inspectSernageomin(),
   ]);
-  return NextResponse.json({ generatedAt: new Date().toISOString(), csn, sernageomin });
+  return NextResponse.json({
+    generatedAt: new Date().toISOString(),
+    csn: result(csn),
+    sernageomin: result(sernageomin),
+  });
+}
+
+function result<T>(value: PromiseSettledResult<T>) {
+  return value.status === "fulfilled"
+    ? value.value
+    : { error: value.reason instanceof Error ? value.reason.message : String(value.reason) };
 }
 
 async function inspectCsn() {
@@ -26,19 +36,23 @@ async function inspectCsn() {
   const html = await response.text();
   const links = [...html.matchAll(/href=["']([^"']*\/sismicidad\/informes\/(\d{4})\/(\d{2})\/(\d+)\.html)["']/gi)]
     .map((match) => ({ url: new URL(match[1], response.url || CSN).toString(), year: match[2], month: match[3], eventId: match[4] }));
-  const unique = [...new Map(links.map((item) => [item.eventId, item])).values()].slice(0, 20);
+  const unique = [...new Map(links.map((item) => [item.eventId, item])).values()].slice(0, 15);
   const details = await Promise.all(unique.map(async (item) => {
-    const detailResponse = await fetch(item.url, {
-      headers: { Accept: "text/html,*/*", "User-Agent": USER_AGENT },
-      cache: "no-store",
-      signal: AbortSignal.timeout(15_000),
-    });
-    const detail = await detailResponse.text();
-    return {
-      ...item,
-      status: detailResponse.status,
-      parsed: parseCsnDetail(detail),
-    };
+    try {
+      const detailResponse = await fetch(item.url, {
+        headers: { Accept: "text/html,*/*", "User-Agent": USER_AGENT },
+        cache: "no-store",
+        signal: AbortSignal.timeout(10_000),
+      });
+      const detail = await detailResponse.text();
+      return {
+        ...item,
+        status: detailResponse.status,
+        parsed: parseCsnDetail(detail),
+      };
+    } catch (error) {
+      return { ...item, error: error instanceof Error ? error.message : String(error) };
+    }
   }));
   return {
     status: response.status,
@@ -53,29 +67,38 @@ async function inspectSernageomin() {
     headers: { Accept: "text/html,*/*", "User-Agent": USER_AGENT },
     cache: "no-store",
     redirect: "follow",
-    signal: AbortSignal.timeout(25_000),
+    signal: AbortSignal.timeout(20_000),
   });
   const html = await response.text();
   const candidates = [...html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)]
-    .map((match) => ({
-      url: new URL(match[1], response.url || SERNAGEOMIN_SEARCH).toString(),
-      title: cleanHtml(match[2]),
-    }))
-    .filter((item) => /alerta.*(?:volc|t[eé]cnica)|(?:volc|t[eé]cnica).*alerta/i.test(item.title))
-    .filter((item) => new URL(item.url).hostname.endsWith("sernageomin.cl"));
-  const unique = [...new Map(candidates.map((item) => [item.url, item])).values()].slice(0, 30);
-  const articles = await Promise.all(unique.map(async (item) => {
-    const articleResponse = await fetch(item.url, {
-      headers: { Accept: "text/html,*/*", "User-Agent": USER_AGENT },
-      cache: "no-store",
-      signal: AbortSignal.timeout(20_000),
+    .flatMap((match) => {
+      const title = cleanHtml(match[2]);
+      if (!/alerta.*(?:volc|t[eé]cnica)|(?:volc|t[eé]cnica).*alerta/i.test(title)) return [];
+      try {
+        const url = new URL(match[1], response.url || SERNAGEOMIN_SEARCH).toString();
+        if (!new URL(url).hostname.endsWith("sernageomin.cl")) return [];
+        return [{ url, title }];
+      } catch {
+        return [];
+      }
     });
-    const article = await articleResponse.text();
-    return {
-      ...item,
-      status: articleResponse.status,
-      parsed: parseSernageominArticle(article),
-    };
+  const unique = [...new Map(candidates.map((item) => [item.url, item])).values()].slice(0, 15);
+  const articles = await Promise.all(unique.map(async (item) => {
+    try {
+      const articleResponse = await fetch(item.url, {
+        headers: { Accept: "text/html,*/*", "User-Agent": USER_AGENT },
+        cache: "no-store",
+        signal: AbortSignal.timeout(10_000),
+      });
+      const article = await articleResponse.text();
+      return {
+        ...item,
+        status: articleResponse.status,
+        parsed: parseSernageominArticle(article),
+      };
+    } catch (error) {
+      return { ...item, error: error instanceof Error ? error.message : String(error) };
+    }
   }));
   return {
     status: response.status,
