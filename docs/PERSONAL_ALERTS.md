@@ -34,6 +34,35 @@ Si el usuario cambia región o comuna sin confirmar una nueva coordenada, ANTEMA
 
 El precio o costo de combustible sólo se calcula cuando existe una observación CNE real compatible con el combustible configurado.
 
+## Combustible operativo — CNE Bencina en Línea
+
+La fuente operativa para precios personales es `cl.cne.bencina-en-linea`.
+
+Contrato validado en producción el 2026-08-24:
+
+- backend público CNE: `https://api.bencinaenlinea.cl/api/busqueda_estacion_filtro`;
+- no requiere token;
+- 1.822 estaciones en el snapshot validado;
+- 52 estaciones en Región de Los Ríos;
+- 17 estaciones en Valdivia;
+- combustibles personales soportados: 93, 95, 97 y diésel;
+- se preserva autoservicio/asistido, coordenadas, dirección, marca, precio, unidad y fecha fuente del precio;
+- calidad `provisional` porque el backend público es operacional pero su contrato no está documentado como API estable de terceros.
+
+La primera ingesta normalizó 7.566 precios, aceptó 7.562 versiones nuevas y detectó 4 duplicados exactos ya presentes dentro del snapshot fuente. El replay normalizó los mismos 7.566 y produjo 0 nuevos / 7.566 duplicados.
+
+Los precios de estación se consideran vigentes por presencia en el snapshot público actual usando `last_seen_at`. `observed_at` conserva la fecha fuente del precio; una fecha antigua no implica por sí sola que el precio dejó de ser actual si la estación sigue publicándolo en el snapshot vigente.
+
+Mientras el usuario no seleccione combustible pueden mostrarse 93, 95, 97 y diésel relevantes para su ubicación. Cuando configura un combustible, el read model conserva sólo ese tipo. Si además configura capacidad de estanque, el costo de carga completa se calcula como:
+
+```text
+precio CLP/L × litros de estanque
+```
+
+No se inventan precios, promedios ni costos cuando falta evidencia compatible.
+
+La API CNE protegida con `CNE_API_TOKEN` se mantiene como fuente opcional para series regionales/históricas y deja de bloquear el caso operacional personal.
+
 ## Vigencia
 
 `external_observations` conserva versiones inmutables. `last_seen_at` registra la última ingesta en que una versión exacta volvió a aparecer en la fuente oficial.
@@ -68,7 +97,7 @@ Las observaciones relacionadas se consolidan mediante `alert_key`. Ejemplos:
 - `air-quality`;
 - `wildfire-risk:<fecha>`.
 
-Una señal relevante no es automáticamente una alerta.
+Una señal relevante no es automáticamente una alerta. El precio actual de combustible se trata primero como impacto personal; una alerta de precio requerirá una regla explícita de cambio o umbral y suficiente historia real para evaluarla.
 
 ## Recalculo
 
@@ -83,7 +112,7 @@ La falla de una proyección personal no invalida la escritura canónica de la fu
 
 Perfil de validación: `juan@n3uralia.com`, Valdivia, Región de Los Ríos.
 
-Prueba de reingesta real:
+Prueba de reingesta real MOP:
 
 - MOP Vialidad: 918 registros normalizados, 0 nuevos, 918 duplicados;
 - MOP Emergencias de Infraestructura: 4.569 normalizados, 0 nuevos, 4.569 duplicados;
@@ -98,12 +127,19 @@ Los 18 registros de la regla anterior fueron resueltos al migrar al modelo conso
 
 El perfil ya soporta ubicación precisa confirmada por el navegador para cualquier usuario. Juan conserva su coordenada de referencia actual hasta que la reemplace, la quite o cambie de comuna/región sin confirmar una nueva.
 
-## Gates pendientes
+Validación Bencina en Línea para Valdivia:
+
+- diésel autoservicio: 16 precios, rango $1.334–$1.358/L;
+- diésel asistido: 4 precios, rango $1.334–$1.341/L;
+- 93 autoservicio: 14 precios, rango $1.469–$1.519/L;
+- 95 autoservicio: 15 precios, rango $1.504–$1.554/L;
+- 97 autoservicio: 14 precios, rango $1.534–$1.584/L;
+- también existen precios asistidos para 93, 95 y 97.
+
+El read model de Juan devuelve actualmente cuatro señales de combustible —93, 95, 97 y diésel— porque todavía no ha seleccionado un tipo en su perfil. La selección de combustible reducirá ese conjunto a una sola preferencia.
+
+## Gate pendiente
 
 ### Automatización periódica
 
 Producción no tiene `CRON_SECRET` configurado al 2026-08-24. No se habilita un cron público sin autenticación. Mientras ese secreto no exista, el refresco ocurre al ejecutar una ingesta real y al modificar un perfil.
-
-### Combustible
-
-Producción no tiene `CNE_API_TOKEN` configurado al 2026-08-24. El modelo y el cálculo de costo por estanque ya están preparados, pero no se muestran precios ficticios.
