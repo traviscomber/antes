@@ -109,7 +109,73 @@ export const chileSignalSources = [
     cadence: "Public situation information refreshed every 5 minutes",
     priority: "P0",
     canonicalUrl: "https://www.conaf.cl/incendios/situacion-actual-y-pronostico-de-incendios/",
-    description: "Official current wildfire situation; machine-readable production contract still requires validation.",
+    description: "Official current wildfire situation queried from the public CONAF Power BI semantic model.",
+  },
+  {
+    id: "cl.cen.cmg-online",
+    name: "Coordinador CMg en Línea",
+    authority: "Coordinador Eléctrico Nacional",
+    domain: "energy",
+    authMode: "api_key",
+    cadence: "15-minute operational intervals",
+    priority: "P0",
+    canonicalUrl: "https://sipub.api.coordinador.cl/costos-marginales-online-8b/v4/findAll",
+    description: "Online marginal cost for the official representative SEN bars, expressed in USD/MWh.",
+  },
+  {
+    id: "cl.cen.demand-net",
+    name: "Coordinador Demanda Neta",
+    authority: "Coordinador Eléctrico Nacional",
+    domain: "energy",
+    authMode: "api_key",
+    cadence: "Operational time series",
+    priority: "P0",
+    canonicalUrl: "https://sipub.api.coordinador.cl/demanda-neta/v4/findByDate",
+    description: "Official net demand time series for the National Electric System.",
+  },
+  {
+    id: "cl.cen.generation-real",
+    name: "Coordinador Generación Real",
+    authority: "Coordinador Eléctrico Nacional",
+    domain: "energy",
+    authMode: "api_key",
+    cadence: "Current-day generation by technology",
+    priority: "P0",
+    canonicalUrl: "https://sipub.api.coordinador.cl/generacion-real/v3/getDailySum",
+    description: "Official current-day real generation summed by technology.",
+  },
+  {
+    id: "cl.cen.transmission-limitations",
+    name: "Coordinador Limitaciones de Transmisión",
+    authority: "Coordinador Eléctrico Nacional",
+    domain: "energy",
+    authMode: "api_key",
+    cadence: "Operational / event-driven",
+    priority: "P0",
+    canonicalUrl: "https://sipub.api.coordinador.cl/limitaciones-transmision/v4/findByDate",
+    description: "Official transmission limitations for anticipating grid constraints and downstream impacts.",
+  },
+  {
+    id: "cl.cen.reservoirs",
+    name: "Coordinador Embalses",
+    authority: "Coordinador Eléctrico Nacional",
+    domain: "water",
+    authMode: "api_key",
+    cadence: "Current reservoir level plus weekly history",
+    priority: "P1",
+    canonicalUrl: "https://sipub.api.coordinador.cl/embalse-real/v3/findLast",
+    description: "Current official reservoir levels used by the electricity system.",
+  },
+  {
+    id: "cl.cen.fuel-stock",
+    name: "Coordinador Stock de Combustible",
+    authority: "Coordinador Eléctrico Nacional",
+    domain: "energy",
+    authMode: "api_key",
+    cadence: "Operational date-range dataset",
+    priority: "P1",
+    canonicalUrl: "https://sipub.api.coordinador.cl/stock-combustible/v4/findByDate",
+    description: "Official fuel stock available for electricity generation.",
   },
   {
     id: "cl.bcch.bde",
@@ -141,8 +207,6 @@ export function getCountrySignalSource(sourceId: string): CountrySignalSource | 
 
 export function requireCountrySignalSource(sourceId: string): CountrySignalSource {
   const source = getCountrySignalSource(sourceId);
-  if (!source) {
-    throw new Error(`Country signal source is not registered: ${sourceId}`);
-  }
+  if (!source) throw new Error(`Country signal source is not registered: ${sourceId}`);
   return source;
 }
