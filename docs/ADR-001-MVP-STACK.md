@@ -4,7 +4,7 @@
 
 ## Contexto
 
-ANTES parte desde un repositorio nuevo y necesita demostrar anticipación operacional antes de optimizar infraestructura. El primer piloto enterprise todavía no impone un proveedor cloud, sistema de identidad, volumen de señales o restricción regulatoria específica.
+ANTEMANO parte desde un repositorio nuevo y necesita demostrar anticipación operacional antes de optimizar infraestructura. El primer piloto enterprise todavía no impone un proveedor cloud, sistema de identidad, volumen de señales o restricción regulatoria específica.
 
 Por eso el stack inicial debe ser estable, portable y suficientemente simple para cambiar de proveedor sin reescribir el dominio.
 
@@ -118,7 +118,7 @@ Rechazados para el primer incremento. El dominio será modular, pero el desplieg
 
 ### Data lake como requisito
 
-Rechazado. ANTES puede referenciar evidencia cruda en object storage y mantener sólo datos normalizados necesarios para el producto.
+Rechazado. ANTEMANO puede referenciar evidencia cruda en object storage y mantener sólo datos normalizados necesarios para el producto.
 
 ### Vector database por defecto
 
