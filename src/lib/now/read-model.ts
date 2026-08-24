@@ -229,8 +229,8 @@ export async function getNowSnapshot(organizationId: string, userId: string): Pr
       limit 20`,
     ),
     profileHasLocation(profile)
-      ? loadPersonalRows(sql, profile)
-      : Promise.resolve([]),
+      ? loadPersonalRows(databaseUrl, profile)
+      : Promise.resolve([] as PersonalSignalRow[]),
   ]);
 
   const metrics = metricsRows[0] as MetricsRow | undefined;
@@ -248,7 +248,7 @@ export async function getNowSnapshot(organizationId: string, userId: string): Pr
   }));
 
   const signals = (signalRows as SignalRow[]).map(mapSignal);
-  const personalSignals = (personalRows as PersonalSignalRow[])
+  const personalSignals = personalRows
     .filter((row) => fuelSignalMatchesProfile(row, profile))
     .map((row) => mapPersonalSignal(row, profile));
 
@@ -277,15 +277,16 @@ export async function getNowSnapshot(organizationId: string, userId: string): Pr
 }
 
 async function loadPersonalRows(
-  sql: ReturnType<typeof neon>,
+  databaseUrl: string,
   profile: UserProfile,
-): Promise<unknown[]> {
+): Promise<PersonalSignalRow[]> {
+  const sql = neon(databaseUrl);
   const commune = profile.homeCommune ?? null;
   const region = profile.homeRegion ?? null;
   const latitude = profile.homeLatitude ?? null;
   const longitude = profile.homeLongitude ?? null;
 
-  return sql.query(
+  const rows = await sql.query(
     `with base as (
        select
          o.id,
@@ -384,6 +385,8 @@ async function loadPersonalRows(
      limit 16`,
     [commune, region, latitude, longitude],
   );
+
+  return rows as PersonalSignalRow[];
 }
 
 function mapSignal(row: SignalRow): NowSignal {
