@@ -48,6 +48,12 @@ type ReadingRow = {
   value_numeric: number | string | null;
 };
 
+type TrendInfo = {
+  trend: CalleCalleTrend;
+  trendDeltaM3s?: number;
+  trendHours?: number;
+};
+
 export async function getCalleCalleHydrologyContext(profile: {
   homeCommune?: string;
   homeRegion?: string;
@@ -99,7 +105,9 @@ export function buildCalleCalleAssessment(
   const yellowPercent = round1((latest.valueM3s / CALLE_CALLE_THRESHOLDS.yellow.flowM3s) * 100);
   const redPercent = round1((latest.valueM3s / CALLE_CALLE_THRESHOLDS.red.flowM3s) * 100);
   const previous = findTrendAnchor(valid, latestMs);
-  const trendInfo = previous ? calculateTrend(previous, latest) : { trend: "unknown" as const };
+  const trendInfo: TrendInfo = previous
+    ? calculateTrend(previous, latest)
+    : { trend: "unknown" };
 
   let state: CalleCalleTechnicalState;
   if (ageHours > MAX_READING_AGE_HOURS) state = "stale";
@@ -168,11 +176,7 @@ function findTrendAnchor(readings: CalleCalleReading[], latestMs: number): Calle
   return readings.slice(1).find((reading) => latestMs - Date.parse(reading.observedAt) <= 24 * 3_600_000);
 }
 
-function calculateTrend(previous: CalleCalleReading, latest: CalleCalleReading): {
-  trend: CalleCalleTrend;
-  trendDeltaM3s: number;
-  trendHours: number;
-} {
+function calculateTrend(previous: CalleCalleReading, latest: CalleCalleReading): TrendInfo {
   const hours = Math.max(1 / 60, (Date.parse(latest.observedAt) - Date.parse(previous.observedAt)) / 3_600_000);
   const delta = latest.valueM3s - previous.valueM3s;
   const base = Math.max(Math.abs(previous.valueM3s), 1);
