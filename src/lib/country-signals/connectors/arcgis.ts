@@ -19,6 +19,7 @@ interface ArcGisIdsResponse extends JsonObject {
 
 interface ArcGisFeaturesResponse extends JsonObject {
   features?: Array<{ attributes?: unknown; geometry?: unknown }>;
+  exceededTransferLimit?: boolean;
   error?: unknown;
 }
 
@@ -55,7 +56,6 @@ export async function fetchArcGisFeatures(
   idsUrl.searchParams.set("f", "json");
 
   const idsPayload = (await fetchJson(idsUrl)) as ArcGisIdsResponse;
-  throwIfArcGisError(idsPayload.error);
   const objectIds = Array.isArray(idsPayload.objectIds)
     ? idsPayload.objectIds.filter((value): value is number => typeof value === "number").slice(0, maxFeatures)
     : [];
@@ -73,21 +73,30 @@ export async function fetchArcGisFeatures(
     url.searchParams.set("f", "json");
 
     const payload = (await fetchJson(url)) as ArcGisFeaturesResponse;
-    throwIfArcGisError(payload.error);
-    const rows = Array.isArray(payload.features) ? payload.features : [];
-    for (const row of rows) {
-      if (!isObject(row.attributes)) continue;
-      const geometry = isObject(row.geometry)
-        ? {
-            x: finiteNumber(row.geometry.x),
-            y: finiteNumber(row.geometry.y),
-          }
-        : undefined;
-      features.push({ attributes: row.attributes, geometry });
-    }
+    features.push(...parseFeatures(payload));
   }
 
   return features;
+}
+
+export async function fetchArcGisDirectFeatures(
+  layerUrl: string,
+  where = "1=1",
+): Promise<ArcGisFeature[]> {
+  const url = queryUrl(layerUrl);
+  url.searchParams.set("where", where);
+  url.searchParams.set("outFields", "*");
+  url.searchParams.set("returnGeometry", "true");
+  url.searchParams.set("outSR", "4326");
+  url.searchParams.set("f", "json");
+
+  const payload = (await fetchJson(url)) as ArcGisFeaturesResponse;
+  if (payload.exceededTransferLimit === true) {
+    throw new Error(
+      "ArcGIS joined layer exceeded its direct-query transfer limit; refusing a partial ingestion.",
+    );
+  }
+  return parseFeatures(payload);
 }
 
 export function readArcGisAttribute(
@@ -148,6 +157,22 @@ export function arcGisEvidenceUrl(layerUrl: string, where = "1=1"): string {
   url.searchParams.set("outSR", "4326");
   url.searchParams.set("f", "json");
   return url.toString();
+}
+
+function parseFeatures(payload: ArcGisFeaturesResponse): ArcGisFeature[] {
+  const rows = Array.isArray(payload.features) ? payload.features : [];
+  const features: ArcGisFeature[] = [];
+  for (const row of rows) {
+    if (!isObject(row.attributes)) continue;
+    const geometry = isObject(row.geometry)
+      ? {
+          x: finiteNumber(row.geometry.x),
+          y: finiteNumber(row.geometry.y),
+        }
+      : undefined;
+    features.push({ attributes: row.attributes, geometry });
+  }
+  return features;
 }
 
 function queryUrl(layerUrl: string): URL {
