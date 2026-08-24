@@ -1,5 +1,6 @@
 import type { CountrySignalConnector } from "../types";
 import { BancoCentralConnector } from "./banco-central";
+import { BencinaEnLineaConnector } from "./bencina-en-linea";
 import { createCenSipConnector } from "./cen-sip";
 import { ChileCompraDailyTenderConnector } from "./chilecompra";
 import { createCneFuelConnector } from "./cne-fuels";
@@ -79,6 +80,8 @@ export function createCountrySignalConnector(
       return new ChileCompraDailyTenderConnector();
     case "cl.csn.earthquakes":
       return new CsnEarthquakeConnector();
+    case "cl.cne.bencina-en-linea":
+      return new BencinaEnLineaConnector();
     case "cl.cne.liquid-fuel-prices":
       return createCneFuelConnector("cl.cne.liquid-fuel-prices");
     case "cl.cne.liquid-fuel-sales":
