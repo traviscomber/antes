@@ -24,7 +24,14 @@ type SourceResult = {
 };
 
 export async function GET(request: NextRequest) {
-  if (!isAuthorizedCron(request)) {
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) {
+    return NextResponse.json(
+      { ok: false, error: "cron_secret_unconfigured" },
+      { status: 503 },
+    );
+  }
+  if (request.headers.get("authorization") !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
@@ -110,12 +117,6 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json(summary, { status: state === "failed" ? 502 : 200 });
-}
-
-function isAuthorizedCron(request: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return false;
-  return request.headers.get("authorization") === `Bearer ${secret}`;
 }
 
 function publicError(error: unknown): string {
