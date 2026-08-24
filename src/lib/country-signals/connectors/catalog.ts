@@ -22,6 +22,7 @@ import {
   DgaDirectAlertsConnector,
   MopAllInfrastructureEmergenciesConnector,
 } from "./mop-live-overrides";
+import { MuniValdiviaOfficialContextConnector } from "./munivaldivia";
 import { ObservatorioLogisticoConnector } from "./observatorio-logistico";
 import { OdepaWholesaleProduceConnector } from "./odepa-wholesale";
 import { RioenLineaRegionalNewsConnector } from "./rioenlinea";
@@ -71,6 +72,8 @@ export function createCountrySignalConnector(
       return new AguasDecimaRuntimeConnector();
     case "cl.rioenlinea.regional-news":
       return new RioenLineaRegionalNewsConnector();
+    case "cl.munivaldivia.official-context":
+      return new MuniValdiviaOfficialContextConnector();
     case "cl.cen.cmg-online":
       return createCenSipConnector("cl.cen.cmg-online");
     case "cl.cen.demand-net":
