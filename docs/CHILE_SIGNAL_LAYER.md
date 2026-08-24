@@ -56,15 +56,7 @@ Conector: `cl.conaf.active-fires`.
 
 La página oficial de situación actual publica un reporte Power BI público actualizado cada cinco minutos. ANTEMANO no hace scraping visual: resuelve el contrato `publish-to-web`, identifica el modelo y la sección `Situación Actual`, reutiliza la consulta semántica del visual oficial y decodifica la respuesta DSR de Power BI.
 
-El visual validado proyecta:
-
-- latitud y longitud;
-- fecha/hora de inicio;
-- superficie afectada;
-- nombre del incendio;
-- región y comuna;
-- ámbito responsable;
-- estado operacional.
+El visual validado proyecta latitud/longitud, fecha de inicio, superficie afectada, nombre, región, comuna, ámbito y estado operacional.
 
 La consulta de validación devolvió **31** incidentes mapeados de la temporada. Para la señal `fire.wildfire.active`, ANTEMANO conserva únicamente estados operacionales no extinguidos publicados por CONAF (`En combate`, `Controlado`, `Bajo observación` o `En trayecto`). `Extinguido` no se convierte en incendio activo.
 
@@ -87,10 +79,7 @@ La primera ejecución productiva normalizó 1.115 filas oficiales de febrero de 
 
 Conector: `cl.dga.hydrometric`.
 
-El servicio oficial DGA/MOP actualiza la vista de alertas aproximadamente cada 15–60 minutos según estación. ANTEMANO une:
-
-- tabla de alertas/lecturas actuales;
-- catálogo georreferenciado de estaciones de la Red Hidrométrica Nacional.
+El servicio oficial DGA/MOP actualiza la vista de alertas aproximadamente cada 15–60 minutos según estación. ANTEMANO une tabla de alertas/lecturas actuales y catálogo georreferenciado de estaciones de la Red Hidrométrica Nacional.
 
 **Regla de calidad:** la vista DGA genera filas `sin alerta / valor 0` con timestamp de refresh para estaciones sin una alerta activa. Esas filas no son nuevas mediciones y se excluyen de la ingesta. El conector conserva únicamente `mod_indale > 0` (Azul/Amarilla/Roja).
 
@@ -138,16 +127,28 @@ Por ello el health de la fuente queda **degraded**, no LIVE. ANTEMANO no reconst
 
 ## Fuentes implementadas que requieren credenciales
 
+### Coordinador Eléctrico Nacional / SIP
+
+Se implementaron seis conectores oficiales:
+
+- `cl.cen.cmg-online` — costos marginales online;
+- `cl.cen.demand-net` — demanda neta;
+- `cl.cen.generation-real` — generación real por tecnología;
+- `cl.cen.transmission-limitations` — limitaciones de transmisión;
+- `cl.cen.reservoirs` — última cota de embalses del sistema eléctrico;
+- `cl.cen.fuel-stock` — stock de combustible para generación.
+
+La vía soportada por el Coordinador es la API SIP y autentica con `user_key` en query string. ANTEMANO usa la variable `CEN_SIP_API_KEY`; la key nunca forma parte de `rawEvidenceRef`, `sourceUrl` ni mensajes de error persistidos.
+
+Los dashboards públicos del Coordinador también fueron auditados. Son mashups Qlik Sense y publican los `appId`, IDs de objetos y capacidad de exportación utilizados por sus propios gráficos. El virtual proxy `/ext/` entrega una cookie anónima `X-Qlik-Session-ext`, pero el Qlik Engine rechazó con HTTP **403** las conexiones WebSocket servidor-a-servidor incluso reproduciendo cookie, `Origin` e identidad. ANTEMANO no evade ese control y no usa Qlik como backend de producción.
+
+El código SIP incluye paginación, límite de seguridad contra cargas truncadas, normalización tipada y deduplicación determinística. Hasta observar la primera respuesta autenticada real, los parsers se mantienen `provisional` y preservan cualquier timestamp local sin zona como evidencia en lugar de inventar un offset UTC de Chile.
+
+Validación de producción del 24 de agosto de 2026: los seis conectores reportaron **unconfigured** porque `CEN_SIP_API_KEY` no está provisionada. No se realizó ninguna escritura Neon ni se declaró ninguna fuente CEN LIVE.
+
 ### DMC Weather / WRF
 
 `cl.dmc.wrf`
-
-- temperatura;
-- precipitación;
-- humedad;
-- viento;
-- estaciones;
-- WRF.
 
 Requiere `DMC_USER` y `DMC_TOKEN`.
 
@@ -171,15 +172,14 @@ Conector para USD/CLP y UF. Requiere `BCCH_BDE_TOKEN`.
 
 ## Próximo radar oficial
 
-Con CONAF cerrado hasta el límite de sus contratos públicos actuales, la prioridad es:
+Con CONAF cerrado hasta el límite de sus contratos públicos y CEN implementado hasta su gate oficial de credencial, la prioridad es:
 
-1. **Coordinador Eléctrico Nacional** — demanda, generación, transmisión, costos marginales, embalses y combustible;
-2. **SINCA / MMA** — calidad del aire horaria;
-3. **DGA** — embalses, decretos de escasez, restricciones y una fuente estable de telemetría para caudal previo a alerta;
-4. **CNE** — capacidad instalada, generación distribuida, combustibles y factor de emisión;
-5. **ODEPA** — precios/volúmenes agroalimentarios;
-6. **ChileCompra OCDS** — compras y demanda pública en tiempo real;
-7. **SMA / SNIFA + SEA** — fiscalización, sanciones, medidas provisionales y proyectos/pertinencias.
+1. **SINCA / MMA** — calidad del aire horaria;
+2. **DGA** — embalses, decretos de escasez, restricciones y una fuente estable de telemetría para caudal previo a alerta;
+3. **CNE** — capacidad instalada, generación distribuida, combustibles y factor de emisión;
+4. **ODEPA** — precios/volúmenes agroalimentarios;
+5. **ChileCompra OCDS** — compras y demanda pública en tiempo real;
+6. **SMA / SNIFA + SEA** — fiscalización, sanciones, medidas provisionales y proyectos/pertinencias.
 
 ## Contrato canónico
 
