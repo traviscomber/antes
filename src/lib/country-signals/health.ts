@@ -1,5 +1,10 @@
 import { BancoCentralConnector } from "./connectors/banco-central";
 import { CneGenerationConnector } from "./connectors/cne-generation";
+import {
+  probeConafActiveFireHealth,
+  probeConafForecastHealth,
+  probeConafRedButtonHealth,
+} from "./connectors/conaf";
 import { DmcWrfConnector } from "./connectors/dmc";
 import { LeyChileConnector } from "./connectors/leychile";
 import {
@@ -30,6 +35,10 @@ export async function getChileSignalHealth(): Promise<SourceHealth[]> {
   const activeChecks = new Map<string, Promise<SourceHealth>>(
     connectors.map((connector) => [connector.source.id, connector.healthCheck()]),
   );
+
+  activeChecks.set("cl.conaf.wildfire-forecast", probeConafForecastHealth());
+  activeChecks.set("cl.conaf.boton-rojo", probeConafRedButtonHealth());
+  activeChecks.set("cl.conaf.active-fires", probeConafActiveFireHealth());
 
   return Promise.all(
     chileSignalSources.map(async (source) => {
