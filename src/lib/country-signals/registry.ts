@@ -68,6 +68,17 @@ export const chileSignalSources = [
     description: "Current reservoir-volume snapshots from the DGA Visualizador Hidrométrico Nacional using VIPNet's official latest-value statistic.",
   },
   {
+    id: "cl.dga.scarcity-decrees",
+    name: "DGA Decretos de Escasez Hídrica",
+    authority: "Dirección General de Aguas",
+    domain: "water",
+    authMode: "none",
+    cadence: "Daily legal-status check",
+    priority: "P0",
+    canonicalUrl: "https://dga.mop.gob.cl/derechos-de-agua/proteccion-de-las-fuentes/decretos-de-escasez-2/",
+    description: "Official scarcity-decree status derived from each DGA-listed decree's explicit decree date and expiration date.",
+  },
+  {
     id: "cl.mop.vialidad.emergencias",
     name: "MOP Emergencias Viales",
     authority: "Dirección de Vialidad, Ministerio de Obras Públicas",
