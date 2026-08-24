@@ -1,6 +1,7 @@
 import type { CountrySignalConnector } from "../types";
 import { BancoCentralConnector } from "./banco-central";
 import { createCenSipConnector } from "./cen-sip";
+import { ChileCompraDailyTenderConnector } from "./chilecompra";
 import { createCneFuelConnector } from "./cne-fuels";
 import { CneGenerationConnector } from "./cne-generation";
 import { ConafActiveFiresConnector } from "./conaf-active-fires";
@@ -65,6 +66,8 @@ export function createCountrySignalConnector(
       return new BancoCentralConnector();
     case "cl.odepa.wholesale-produce":
       return new OdepaWholesaleProduceConnector();
+    case "cl.chilecompra.daily-tenders":
+      return new ChileCompraDailyTenderConnector();
     case "cl.cne.liquid-fuel-prices":
       return createCneFuelConnector("cl.cne.liquid-fuel-prices");
     case "cl.cne.liquid-fuel-sales":
