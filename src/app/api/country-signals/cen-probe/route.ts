@@ -24,9 +24,6 @@ async function inspectMashup(url: string) {
     const scripts = [...html.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)]
       .map((match) => new URL(match[1], base).toString())
       .filter((src) => src.includes("/ext/extensions/"));
-    const styles = [...html.matchAll(/<link[^>]+href=["']([^"']+)["']/gi)]
-      .map((match) => new URL(match[1], base).toString())
-      .filter((src) => src.includes("/ext/extensions/"));
     const guessedJs = url.replace(/\.html(?:\?.*)?$/i, ".js");
     const candidates = [...new Set([...scripts, guessedJs])];
     const code = await Promise.all(
@@ -40,15 +37,15 @@ async function inspectMashup(url: string) {
 
     return {
       url,
-      scripts,
-      styles,
       code: code.map(({ src, text }) => ({
         src,
         bytes: text.length,
-        openApps: matches(text, /openApp\s*\(\s*["']([^"']+)["']/gi),
-        objectIds: matches(text, /getObject\s*\([^,]+,\s*["']([^"']+)["']/gi),
-        urls: matches(text, /https?:\/\/[^\s"'`<>]+/gi),
-        interesting: snippets(text),
+        appIds: matches(text, /appId\s*:\s*["'`]([^"'`]+)["'`]/gi),
+        prefixes: matches(text, /prefix\s*:\s*["'`]([^"'`]*)["'`]/gi),
+        hosts: matches(text, /host\s*:\s*["'`]([^"'`]+)["'`]/gi),
+        ports: matches(text, /port\s*:\s*["'`]([^"'`]*)["'`]/gi),
+        objectPairs: extractObjectPairs(text),
+        dashboardConfig: configSnippets(text),
       })),
     };
   } catch (error) {
@@ -74,32 +71,24 @@ function matches(text: string, pattern: RegExp): string[] {
   return [...new Set([...text.matchAll(pattern)].map((match) => match[1] ?? match[0]))].slice(0, 100);
 }
 
-function snippets(text: string): string[] {
-  const needles = [
-    "openApp",
-    "getObject",
-    "createCube",
-    "createSessionObject",
-    "exportData",
-    "export",
-    "download",
-    "backendApi",
-    "fetch(",
-    "$.ajax",
-    "XMLHttpRequest",
-    "WebSocket",
-    "app.getList",
-  ];
-  const output: string[] = [];
+function extractObjectPairs(text: string) {
+  return [...text.matchAll(/\[\s*["']([^"']+)["']\s*,\s*["']([^"']+)["']\s*\]/g)]
+    .map((match) => ({ elementId: match[1], objectId: match[2] }))
+    .slice(0, 100);
+}
+
+function configSnippets(text: string): string[] {
+  const needles = ["DASHBOARD_CONFIG", "appId:", "qlik.openApp", "objects:", "prefix:", "host:"];
   const lower = text.toLowerCase();
+  const output: string[] = [];
   for (const needle of needles) {
     let from = 0;
-    while (output.length < 80) {
+    while (output.length < 30) {
       const index = lower.indexOf(needle.toLowerCase(), from);
       if (index < 0) break;
-      output.push(text.slice(Math.max(0, index - 220), Math.min(text.length, index + 700)));
+      output.push(text.slice(Math.max(0, index - 350), Math.min(text.length, index + 1500)));
       from = index + needle.length;
     }
   }
-  return [...new Set(output)].slice(0, 80);
+  return [...new Set(output)].slice(0, 30);
 }
