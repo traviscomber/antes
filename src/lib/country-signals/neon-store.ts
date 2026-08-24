@@ -13,6 +13,9 @@ export interface SqlExecutor {
   ): Promise<T[]>;
 }
 
+const OBSERVATION_BATCH_SIZE = 100;
+const OBSERVATION_COLUMN_COUNT = 26;
+
 export class NeonCountrySignalStore implements CountrySignalStore {
   constructor(private readonly db: SqlExecutor) {}
 
@@ -84,8 +87,14 @@ export class NeonCountrySignalStore implements CountrySignalStore {
   ): Promise<ObservationWriteResult> {
     let accepted = 0;
 
-    for (const observation of observations) {
-      const scalar = splitObservationValue(observation.value);
+    for (let offset = 0; offset < observations.length; offset += OBSERVATION_BATCH_SIZE) {
+      const batch = observations.slice(offset, offset + OBSERVATION_BATCH_SIZE);
+      if (batch.length === 0) continue;
+
+      const params = batch.flatMap(observationParams);
+      const valuesSql = batch
+        .map((_, rowIndex) => observationValuePlaceholders(rowIndex))
+        .join(",\n");
       const rows = await this.db.query<{ id: string }>(
         `insert into external_observations (
           id, source_id, source_record_id, source_dataset, signal_type,
@@ -93,43 +102,13 @@ export class NeonCountrySignalStore implements CountrySignalStore {
           value_numeric, value_text, value_boolean, unit, severity,
           country_code, region, province, commune, latitude, longitude,
           raw_evidence_ref, normalized_payload, source_url, source_version, quality_state
-        ) values (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-          $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
-          $22,$23::jsonb,$24,$25,$26
-        )
+        ) values
+        ${valuesSql}
         on conflict do nothing
         returning id`,
-        [
-          observation.id,
-          observation.sourceId,
-          observation.sourceRecordId ?? null,
-          observation.sourceDataset,
-          observation.signalType,
-          observation.observedAt,
-          observation.publishedAt ?? null,
-          observation.ingestedAt,
-          observation.validFrom ?? null,
-          observation.validUntil ?? null,
-          scalar.numeric,
-          scalar.text,
-          scalar.boolean,
-          observation.unit ?? null,
-          observation.severity ?? null,
-          observation.geography?.country ?? "CL",
-          observation.geography?.region ?? null,
-          observation.geography?.province ?? null,
-          observation.geography?.commune ?? null,
-          observation.geography?.latitude ?? null,
-          observation.geography?.longitude ?? null,
-          observation.rawEvidenceRef,
-          JSON.stringify(observation.normalizedPayload),
-          observation.sourceUrl ?? null,
-          observation.sourceVersion ?? null,
-          observation.qualityState,
-        ],
+        params,
       );
-      if (rows.length > 0) accepted += 1;
+      accepted += rows.length;
     }
 
     return {
@@ -191,6 +170,48 @@ export function splitObservationValue(value: ExternalObservation["value"]): {
   if (typeof value === "string") return { numeric: null, text: value, boolean: null };
   if (typeof value === "boolean") return { numeric: null, text: null, boolean: value };
   return { numeric: null, text: null, boolean: null };
+}
+
+function observationParams(observation: ExternalObservation): unknown[] {
+  const scalar = splitObservationValue(observation.value);
+  return [
+    observation.id,
+    observation.sourceId,
+    observation.sourceRecordId ?? null,
+    observation.sourceDataset,
+    observation.signalType,
+    observation.observedAt,
+    observation.publishedAt ?? null,
+    observation.ingestedAt,
+    observation.validFrom ?? null,
+    observation.validUntil ?? null,
+    scalar.numeric,
+    scalar.text,
+    scalar.boolean,
+    observation.unit ?? null,
+    observation.severity ?? null,
+    observation.geography?.country ?? "CL",
+    observation.geography?.region ?? null,
+    observation.geography?.province ?? null,
+    observation.geography?.commune ?? null,
+    observation.geography?.latitude ?? null,
+    observation.geography?.longitude ?? null,
+    observation.rawEvidenceRef,
+    JSON.stringify(observation.normalizedPayload),
+    observation.sourceUrl ?? null,
+    observation.sourceVersion ?? null,
+    observation.qualityState,
+  ];
+}
+
+function observationValuePlaceholders(rowIndex: number): string {
+  const first = rowIndex * OBSERVATION_COLUMN_COUNT + 1;
+  const placeholders = Array.from(
+    { length: OBSERVATION_COLUMN_COUNT },
+    (_, columnIndex) => `$${first + columnIndex}`,
+  );
+  placeholders[22] = `${placeholders[22]}::jsonb`;
+  return `(${placeholders.join(",")})`;
 }
 
 function toIso(value: string | Date): string {
