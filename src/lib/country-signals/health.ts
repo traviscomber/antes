@@ -1,5 +1,6 @@
 import { BancoCentralConnector } from "./connectors/banco-central";
 import { createCenSipConnector, cenSipSourceIds } from "./connectors/cen-sip";
+import { createCneFuelConnector, cneFuelSourceIds } from "./connectors/cne-fuels";
 import { CneGenerationConnector } from "./connectors/cne-generation";
 import {
   ConafActiveFiresConnector,
@@ -38,6 +39,7 @@ export async function getChileSignalHealth(): Promise<SourceHealth[]> {
     new ConafActiveFiresConnector(),
     ...cenSipSourceIds.map((sourceId) => createCenSipConnector(sourceId)),
     new BancoCentralConnector(),
+    ...cneFuelSourceIds.map((sourceId) => createCneFuelConnector(sourceId)),
     new CneGenerationConnector(),
   ];
 
