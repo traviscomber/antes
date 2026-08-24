@@ -1,15 +1,16 @@
-import type { GeoReference } from "../types";
+import type { GeoPosition, GeoReference } from "../types";
 
 type JsonObject = Record<string, unknown>;
 
-export interface ArcGisPointGeometry {
+export interface ArcGisGeometry {
   x?: number;
   y?: number;
+  rings?: GeoPosition[][];
 }
 
 export interface ArcGisFeature {
   attributes: JsonObject;
-  geometry?: ArcGisPointGeometry;
+  geometry?: ArcGisGeometry;
 }
 
 interface ArcGisIdsResponse extends JsonObject {
@@ -137,7 +138,7 @@ export function arcGisDate(attributes: JsonObject, suffix: string): string | und
 }
 
 export function arcGisPointGeography(
-  geometry: ArcGisPointGeometry | undefined,
+  geometry: ArcGisGeometry | undefined,
   region?: string,
   commune?: string,
 ): GeoReference | undefined {
@@ -147,6 +148,47 @@ export function arcGisPointGeography(
     return region || commune ? { country: "CL", region, commune } : undefined;
   }
   return { country: "CL", region, commune, longitude, latitude };
+}
+
+export function arcGisPolygonGeography(
+  geometry: ArcGisGeometry | undefined,
+  region?: string,
+  commune?: string,
+): GeoReference | undefined {
+  const rings = geometry?.rings;
+  if (!rings || rings.length === 0) {
+    return arcGisPointGeography(geometry, region, commune);
+  }
+
+  const positions = rings.flat().filter(isGeoPosition);
+  if (positions.length === 0) {
+    return region || commune ? { country: "CL", region, commune } : undefined;
+  }
+
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const position of positions) {
+    const [x, y] = position;
+    if (typeof x !== "number" || typeof y !== "number") continue;
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  }
+
+  const longitude = Number.isFinite(minX) && Number.isFinite(maxX) ? (minX + maxX) / 2 : undefined;
+  const latitude = Number.isFinite(minY) && Number.isFinite(maxY) ? (minY + maxY) / 2 : undefined;
+
+  return {
+    country: "CL",
+    region,
+    commune,
+    longitude,
+    latitude,
+    geometry: { type: "Polygon", coordinates: rings },
+  };
 }
 
 export function arcGisEvidenceUrl(layerUrl: string, where = "1=1"): string {
@@ -168,11 +210,34 @@ function parseFeatures(payload: ArcGisFeaturesResponse): ArcGisFeature[] {
       ? {
           x: finiteNumber(row.geometry.x),
           y: finiteNumber(row.geometry.y),
+          rings: parseRings(row.geometry.rings),
         }
       : undefined;
     features.push({ attributes: row.attributes, geometry });
   }
   return features;
+}
+
+function parseRings(value: unknown): GeoPosition[][] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const rings: GeoPosition[][] = [];
+  for (const ring of value) {
+    if (!Array.isArray(ring)) continue;
+    const positions = ring.filter(isGeoPosition);
+    if (positions.length >= 4) rings.push(positions);
+  }
+  return rings.length > 0 ? rings : undefined;
+}
+
+function isGeoPosition(value: unknown): value is GeoPosition {
+  return (
+    Array.isArray(value) &&
+    value.length >= 2 &&
+    typeof value[0] === "number" &&
+    Number.isFinite(value[0]) &&
+    typeof value[1] === "number" &&
+    Number.isFinite(value[1])
+  );
 }
 
 function queryUrl(layerUrl: string): URL {
