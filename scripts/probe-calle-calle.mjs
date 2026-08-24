@@ -8,18 +8,33 @@ const response = await fetch(url, {
   signal: AbortSignal.timeout(20000),
 });
 const html = await response.text();
-console.log('HIDROLINEA_PAGE', JSON.stringify({
-  status: response.status,
-  finalUrl: response.url,
-  contentType: response.headers.get('content-type'),
-  length: html.length,
-  title: html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.replace(/\s+/g,' ').trim(),
-  forms: [...html.matchAll(/<form\b[^>]*(?:action=["']([^"']*)["'])?[^>]*>/gi)].slice(0,10).map((m)=>m[1] ?? ''),
-  scripts: [...html.matchAll(/<script\b[^>]+src=["']([^"']+)["']/gi)].slice(0,30).map((m)=>m[1]),
-  hidden: [...html.matchAll(/<input\b[^>]*type=["']hidden["'][^>]*>/gi)].slice(0,30).map((m)=>m[0]),
-  hrefs: [...html.matchAll(/href=["']([^"']+)["']/gi)].map((m)=>m[1]).filter((x)=>/map|estac|caudal|nivel|informe|sat/i.test(x)).slice(0,50),
-}));
-for (const token of ['Pupunahue','Calle Calle','caudal','nivel','fluviometr','station','estacion','google.maps','ViewState','javax.faces']) {
-  const index = html.toLowerCase().indexOf(token.toLowerCase());
-  if (index >= 0) console.log('HIDROLINEA_HTML_HINT', JSON.stringify({ token, snippet: html.slice(Math.max(0,index-1000), index+2500).replace(/\s+/g,' ') }));
+console.log('HIDROLINEA_PAGE', JSON.stringify({ status: response.status, finalUrl: response.url, length: html.length }));
+for (const token of [
+  'function getParametersMeditionsByStationType',
+  'getParametersMeditionsByStationType(',
+  'getMeditions',
+  'graficoMedicionesPopUp',
+  'selectedMarker',
+  'parametroInput',
+  'Caudal',
+  'javax.faces.partial.ajax',
+  'RichFaces.ajax',
+]) {
+  let from = 0;
+  let count = 0;
+  while (count < 8) {
+    const index = html.indexOf(token, from);
+    if (index < 0) break;
+    console.log('HIDROLINEA_CALL_HINT', JSON.stringify({
+      token,
+      occurrence: count,
+      snippet: html.slice(Math.max(0, index - 2500), index + 5000).replace(/\s+/g,' '),
+    }));
+    from = index + token.length;
+    count += 1;
+  }
 }
+const remoteCalls = [...html.matchAll(/function\s+([A-Za-z0-9_$]+)\s*\([^)]*\)\s*\{[^{}]{0,2500}RichFaces\.ajax\([^;]+/g)]
+  .slice(0,50)
+  .map((m)=>({name:m[1], body:m[0].replace(/\s+/g,' ').slice(0,3000)}));
+console.log('HIDROLINEA_REMOTE_FUNCTIONS', JSON.stringify(remoteCalls));
