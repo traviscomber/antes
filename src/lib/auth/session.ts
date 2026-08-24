@@ -12,6 +12,9 @@ const SESSION_COOKIE = "antemano_session";
 const SESSION_TTL_SECONDS = 8 * 60 * 60;
 const LOGIN_WINDOW_MINUTES = 15;
 const MAX_FAILED_ATTEMPTS = 8;
+const SCRYPT_N = 16_384;
+const SCRYPT_R = 8;
+const SCRYPT_P = 1;
 
 export type AppRole = "viewer" | "operator" | "decision_maker" | "admin";
 
@@ -51,6 +54,25 @@ function normalizeEmail(email: string): string {
 
 function tokenHash(token: string): string {
   return createHash("sha256").update(token).digest("hex");
+}
+
+function encodePassword(password: string): string {
+  const salt = randomBytes(16);
+  const derived = scryptSync(password, salt, 64, {
+    N: SCRYPT_N,
+    r: SCRYPT_R,
+    p: SCRYPT_P,
+    maxmem: 64 * 1024 * 1024,
+  });
+
+  return [
+    "scrypt",
+    String(SCRYPT_N),
+    String(SCRYPT_R),
+    String(SCRYPT_P),
+    salt.toString("base64url"),
+    derived.toString("base64url"),
+  ].join("$");
 }
 
 function verifyPassword(password: string, encodedHash: string): boolean {
@@ -124,6 +146,84 @@ export async function clearLoginFailures(email: string): Promise<void> {
          or attempted_at < now() - interval '1 day'`,
     [emailKey],
   );
+}
+
+export async function activateInvite(
+  token: string,
+  password: string,
+): Promise<AuthIdentity | null> {
+  if (!token || password.length < 8 || password.length > 512) return null;
+
+  const passwordHash = encodePassword(password);
+  const rows = await db().query<{
+    user_id: string;
+    email: string;
+    display_name: string | null;
+    membership_id: string;
+    organization_id: string;
+    organization_name: string;
+    role: AppRole;
+  }>(
+    `with invite as (
+       select id, email, organization_id, role
+         from admin_invites
+        where token_hash = $1
+          and used_at is null
+          and expires_at > now()
+        for update
+     ), user_row as (
+       insert into app_users (email, password_hash, status)
+       select email, $2, 'active' from invite
+       on conflict (email) do update set
+         password_hash = excluded.password_hash,
+         status = 'active',
+         updated_at = now()
+       returning id, email, display_name
+     ), membership_row as (
+       insert into organization_memberships (organization_id, user_id, role, status)
+       select i.organization_id, u.id, i.role, 'active'
+         from invite i
+         cross join user_row u
+       on conflict (organization_id, user_id) do update set
+         role = excluded.role,
+         status = 'active',
+         updated_at = now()
+       returning id, user_id, organization_id, role
+     ), consumed as (
+       update admin_invites ai
+          set used_at = now()
+         from invite i
+        where ai.id = i.id
+       returning ai.id
+     )
+     select
+       u.id::text as user_id,
+       u.email,
+       u.display_name,
+       m.id::text as membership_id,
+       m.organization_id,
+       o.name as organization_name,
+       m.role
+     from user_row u
+     join membership_row m on m.user_id = u.id
+     join organizations o on o.id = m.organization_id
+     where exists (select 1 from consumed)
+     limit 1`,
+    [tokenHash(token), passwordHash],
+  );
+
+  const row = rows[0];
+  if (!row) return null;
+
+  return {
+    userId: row.user_id,
+    email: row.email,
+    displayName: row.display_name,
+    membershipId: row.membership_id,
+    organizationId: row.organization_id,
+    organizationName: row.organization_name,
+    role: row.role,
+  };
 }
 
 export async function authenticateUser(
