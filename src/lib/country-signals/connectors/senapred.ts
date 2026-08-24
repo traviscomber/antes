@@ -13,6 +13,7 @@ const USER_AGENT = "N3uralia-ANTEMANO/0.1 (+https://www.antemano.app)";
 const MAX_RESPONSE_BYTES = 2_000_000;
 const MAX_AGE_HOURS = 24;
 const MAX_POSTS = 40;
+const PREPAREDNESS_URL = "https://www.visorchilepreparado.cl/";
 
 export const senapredSource = {
   id: SOURCE_ID,
@@ -30,14 +31,16 @@ type SenapredPost = {
   postId: string;
   publishedAt: string;
   text: string;
-  region?: string;
+  regions: string[];
   commune?: string;
   severity: string;
+  hazardType?: string;
+  evacuationOrdered: boolean;
 };
 
 export class SenapredOfficialAlertConnector implements CountrySignalConnector {
   readonly source = senapredSource;
-  readonly parserVersion = "senapred-telegram@1";
+  readonly parserVersion = "senapred-telegram@2";
 
   async healthCheck(): Promise<SourceHealth> {
     const checkedAt = new Date().toISOString();
@@ -73,7 +76,7 @@ export class SenapredOfficialAlertConnector implements CountrySignalConnector {
       throw new Error("SENAPRED contract mismatch: official channel identity marker missing.");
     }
     const posts = parseSenapredFeed(html, fetchedAt);
-    const observations = posts.map((post) => normalizePost(post, fetchedAt, this.parserVersion));
+    const observations = posts.flatMap((post) => normalizePost(post, fetchedAt, this.parserVersion));
 
     return {
       sourceId: SOURCE_ID,
@@ -85,7 +88,7 @@ export class SenapredOfficialAlertConnector implements CountrySignalConnector {
         state: "healthy",
         checkedAt: fetchedAt,
         latencyMs: Date.now() - startedAt,
-        message: `${observations.length} current actionable SENAPRED communications normalized from the official public channel.`,
+        message: `${observations.length} territorial observations normalized from ${posts.length} current actionable SENAPRED communications.`,
       },
     };
   }
@@ -111,25 +114,29 @@ export function parseSenapredFeed(html: string, nowIso: string): SenapredPost[] 
       postId,
       publishedAt: new Date(publishedMs).toISOString(),
       text,
-      region: detectRegion(text),
+      regions: detectRegions(text),
       commune: detectCommune(text),
       severity: alertSeverity(text),
+      hazardType: detectHazardType(text),
+      evacuationOrdered: /evacuar|evacue|evacuaci[oó]n/i.test(text),
     });
   }
 
   return posts.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt)).slice(0, MAX_POSTS);
 }
 
-function normalizePost(post: SenapredPost, fetchedAt: string, parserVersion: string): ExternalObservation {
+function normalizePost(post: SenapredPost, fetchedAt: string, parserVersion: string): ExternalObservation[] {
   const validUntil = new Date(new Date(post.publishedAt).getTime() + MAX_AGE_HOURS * 3_600_000).toISOString();
   const evidence = `https://t.me/SenapredChile/${post.postId}`;
-  return {
-    id: stableObservationId([SOURCE_ID, post.postId, post.text, parserVersion]),
+  const regions = post.regions.length > 0 ? post.regions : [undefined];
+
+  return regions.map((region) => ({
+    id: stableObservationId([SOURCE_ID, post.postId, region, post.text, parserVersion]),
     organizationId: null,
     sourceId: SOURCE_ID,
     sourceAuthority: senapredSource.authority,
     sourceDataset: "SENAPRED — comunicaciones oficiales públicas",
-    sourceRecordId: post.postId,
+    sourceRecordId: region ? `${post.postId}:${regionKey(region)}` : post.postId,
     observedAt: post.publishedAt,
     publishedAt: post.publishedAt,
     ingestedAt: fetchedAt,
@@ -137,7 +144,7 @@ function normalizePost(post: SenapredPost, fetchedAt: string, parserVersion: str
     validUntil,
     geography: {
       country: "CL",
-      region: post.region,
+      region,
       commune: post.commune,
     },
     signalType: "emergency.senapred.official_alert",
@@ -147,8 +154,12 @@ function normalizePost(post: SenapredPost, fetchedAt: string, parserVersion: str
     normalizedPayload: {
       postId: post.postId,
       message: post.text,
-      derivedRegion: post.region,
+      derivedRegion: region,
+      derivedRegions: post.regions,
       derivedCommune: post.commune,
+      hazardType: post.hazardType,
+      evacuationOrdered: post.evacuationOrdered,
+      preparednessUrl: PREPAREDNESS_URL,
       evidenceTier: "official_public_communication",
       expiryPolicy: `${MAX_AGE_HOURS}h conservative communication window because the public channel does not expose explicit cancellation state`,
       canGenerateAlert: true,
@@ -156,7 +167,7 @@ function normalizePost(post: SenapredPost, fetchedAt: string, parserVersion: str
     sourceUrl: evidence,
     sourceVersion: parserVersion,
     qualityState: "validated",
-  };
+  }));
 }
 
 async function fetchFeed(): Promise<string> {
@@ -183,7 +194,18 @@ function alertSeverity(text: string): string {
   return "watch";
 }
 
-function detectRegion(text: string): string | undefined {
+function detectHazardType(text: string): string | undefined {
+  const value = normalize(text);
+  if (/tsunami|maremoto/.test(value)) return "tsunami";
+  if (/incendio/.test(value)) return "wildfire";
+  if (/desborde|crecida|inundacion/.test(value)) return "flood";
+  if (/aluvion|remocion en masa/.test(value)) return "mass_movement";
+  if (/volcan|volcanica/.test(value)) return "volcanic";
+  if (/sismo/.test(value)) return "earthquake";
+  return undefined;
+}
+
+export function detectRegions(text: string): string[] {
   const normalized = normalize(text);
   const regions: Array<[string[], string]> = [
     [["arica y parinacota"], "Región de Arica y Parinacota"],
@@ -203,10 +225,9 @@ function detectRegion(text: string): string | undefined {
     [["aysen"], "Región de Aysén del General Carlos Ibáñez del Campo"],
     [["magallanes"], "Región de Magallanes y de la Antártica Chilena"],
   ];
-  for (const [keys, label] of regions) {
-    if (keys.some((key) => normalized.includes(key))) return label;
-  }
-  return undefined;
+  return regions
+    .filter(([keys]) => keys.some((key) => normalized.includes(key)))
+    .map(([, label]) => label);
 }
 
 function detectCommune(text: string): string | undefined {
@@ -214,6 +235,10 @@ function detectCommune(text: string): string | undefined {
   if (!match) return undefined;
   const value = match[1].replace(/\s+/g, " ").trim();
   return value.length >= 2 && value.length <= 60 ? value : undefined;
+}
+
+function regionKey(value: string): string {
+  return normalize(value).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
 function htmlText(value: string): string {
