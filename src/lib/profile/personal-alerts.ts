@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
 import { getUserProfile, type UserProfile } from "./user-profile";
 
-export const PERSONAL_ALERT_RULE_VERSION = "personal-alerts@1";
+export const PERSONAL_ALERT_RULE_VERSION = "personal-alerts@2";
 
 export type PersonalAlertLevel = "watch" | "warning" | "critical";
 export type PersonalAlertRelevance = "commune" | "region" | "proximity" | "preference";
@@ -11,9 +11,11 @@ export interface PersonalAlertRefreshResult {
   userId: string;
   sourceId?: string;
   observationsEvaluated: number;
+  rawDecisionsMatched: number;
   decisionsMatched: number;
   activeAlerts: number;
   resolvedAlerts: number;
+  legacyAlertsResolved: number;
 }
 
 export interface PersonalAlertBatchResult {
@@ -53,12 +55,15 @@ type ObservationRow = {
 };
 
 type AlertDecision = {
+  alertKey: string;
   observationId: string;
   sourceId: string;
+  sourceRecordId?: string;
   signalType: string;
   level: PersonalAlertLevel;
   relevance: PersonalAlertRelevance;
   distanceKm?: number;
+  observedAt: string;
   reason: string;
   impact: Record<string, unknown>;
 };
@@ -69,6 +74,7 @@ type StateRow = { state: string };
 
 const MAX_CANDIDATES = 2_500;
 const MAX_USERS_PER_PASS = 500;
+const MAX_GROUP_MEMBERS_IN_IMPACT = 30;
 
 export async function refreshPersonalAlertsForUser(
   userId: string,
@@ -78,40 +84,51 @@ export async function refreshPersonalAlertsForUser(
   const profile = await getUserProfile(userId);
 
   if (!profileHasLocation(profile)) {
-    const resolvedAlerts = await resolveMissingAlerts(database, userId, [], options.sourceId);
+    const legacyAlertsResolved = await resolveLegacyAlerts(database, userId);
+    const resolvedAlerts = await resolveMissingAlerts(database, userId, []);
     return {
       userId,
       sourceId: options.sourceId,
       observationsEvaluated: 0,
+      rawDecisionsMatched: 0,
       decisionsMatched: 0,
       activeAlerts: 0,
       resolvedAlerts,
+      legacyAlertsResolved,
     };
   }
 
-  const observations = await loadRelevantObservations(database, profile, options.sourceId);
+  // Always evaluate the complete personal alert surface. Cross-source consolidation
+  // (for example MOP Vialidad vs the general MOP emergency map) must not depend on
+  // which single source happened to trigger this refresh.
+  const observations = await loadRelevantObservations(database, profile);
   const now = new Date();
-  const decisions = observations
+  const rawDecisions = observations
     .filter((row) => isCurrentObservation(row, now))
     .map((row) => decideAlert(row, profile))
     .filter((value): value is AlertDecision => value !== undefined);
+  const decisions = consolidateDecisions(rawDecisions);
 
+  const legacyAlertsResolved = await resolveLegacyAlerts(database, userId);
   const activeIds: string[] = [];
   let activeAlerts = 0;
 
   for (const decision of decisions) {
-    const id = personalAlertId(userId, decision.observationId);
+    const id = personalAlertId(userId, decision.alertKey);
     activeIds.push(id);
     const rows = await database.query<StateRow>(
       `insert into personal_alerts (
-         id, user_id, observation_id, source_id, signal_type, state, level,
-         relevance, distance_km, rule_version, reason, impact,
+         id, alert_key, user_id, observation_id, source_id, signal_type,
+         state, level, relevance, distance_km, rule_version, reason, impact,
          first_seen_at, last_seen_at, resolved_at, updated_at
        ) values (
-         $1,$2,$3,$4,$5,'active',$6,$7,$8,$9,$10,$11::jsonb,
+         $1,$2,$3,$4,$5,$6,'active',$7,$8,$9,$10,$11,$12::jsonb,
          now(),now(),null,now()
        )
-       on conflict (user_id, observation_id, rule_version) do update set
+       on conflict (user_id, alert_key, rule_version) do update set
+         observation_id = excluded.observation_id,
+         source_id = excluded.source_id,
+         signal_type = excluded.signal_type,
          state = case when personal_alerts.state = 'dismissed' then 'dismissed' else 'active' end,
          level = excluded.level,
          relevance = excluded.relevance,
@@ -124,6 +141,7 @@ export async function refreshPersonalAlertsForUser(
        returning state`,
       [
         id,
+        decision.alertKey,
         userId,
         decision.observationId,
         decision.sourceId,
@@ -139,14 +157,16 @@ export async function refreshPersonalAlertsForUser(
     if (rows[0]?.state === "active") activeAlerts += 1;
   }
 
-  const resolvedAlerts = await resolveMissingAlerts(database, userId, activeIds, options.sourceId);
+  const resolvedAlerts = await resolveMissingAlerts(database, userId, activeIds);
   return {
     userId,
     sourceId: options.sourceId,
     observationsEvaluated: observations.length,
+    rawDecisionsMatched: rawDecisions.length,
     decisionsMatched: decisions.length,
     activeAlerts,
     resolvedAlerts,
+    legacyAlertsResolved,
   };
 }
 
@@ -170,7 +190,7 @@ export async function refreshPersonalAlertsForAllUsers(
   for (const user of users) {
     const result = await refreshPersonalAlertsForUser(user.user_id, options);
     activeAlerts += result.activeAlerts;
-    resolvedAlerts += result.resolvedAlerts;
+    resolvedAlerts += result.resolvedAlerts + result.legacyAlertsResolved;
   }
 
   return { usersEvaluated: users.length, activeAlerts, resolvedAlerts };
@@ -179,7 +199,6 @@ export async function refreshPersonalAlertsForAllUsers(
 async function loadRelevantObservations(
   database: SqlExecutor,
   profile: UserProfile,
-  sourceId?: string,
 ): Promise<ObservationRow[]> {
   return database.query<ObservationRow>(
     `with latest_version as (
@@ -211,12 +230,9 @@ async function loadRelevantObservations(
          ) as version_rank
        from external_observations eo
        left join signal_sources ss on ss.id = eo.source_id
-       where ($5::text is null or eo.source_id = $5::text)
-         and (
-           eo.last_seen_at >= now() - interval '45 days'
-           or eo.observed_at >= now() - interval '45 days'
-           or eo.valid_until >= now()
-         )
+       where eo.last_seen_at >= now() - interval '45 days'
+          or eo.observed_at >= now() - interval '45 days'
+          or eo.valid_until >= now()
      ), located as (
        select *,
          case
@@ -253,13 +269,12 @@ async function loadRelevantObservations(
      from relevant
      where relevance_rank > 0
      order by relevance_rank desc, last_seen_at desc, observed_at desc
-     limit $6`,
+     limit $5`,
     [
       profile.homeCommune ?? null,
       profile.homeRegion ?? null,
       profile.homeLatitude ?? null,
       profile.homeLongitude ?? null,
-      sourceId ?? null,
       MAX_CANDIDATES,
     ],
   );
@@ -281,6 +296,7 @@ function decideAlert(row: ObservationRow, profile: UserProfile): AlertDecision |
     return makeDecision(
       row,
       profile,
+      `wildfire:${row.source_record_id ?? row.id}`,
       level,
       relevance,
       distanceKm,
@@ -293,9 +309,11 @@ function decideAlert(row: ObservationRow, profile: UserProfile): AlertDecision |
   if (row.signal_type === "fire.ignition_probability.forecast") {
     if (value === null || value < 70 || !local) return undefined;
     const level: PersonalAlertLevel = value >= 90 ? "critical" : value >= 80 ? "warning" : "watch";
+    const forecastDate = dateKey(row.valid_from ?? row.observed_at);
     return makeDecision(
       row,
       profile,
+      `wildfire-risk:${forecastDate}`,
       level,
       relevance,
       distanceKm,
@@ -308,6 +326,7 @@ function decideAlert(row: ObservationRow, profile: UserProfile): AlertDecision |
     return makeDecision(
       row,
       profile,
+      "water:river-flow",
       severity === "critical" || severity === "high" ? "critical" : "warning",
       relevance,
       distanceKm,
@@ -320,6 +339,7 @@ function decideAlert(row: ObservationRow, profile: UserProfile): AlertDecision |
     return makeDecision(
       row,
       profile,
+      "mop:vialidad",
       severity === "critical" || severity === "high" ? "critical" : "warning",
       relevance,
       distanceKm,
@@ -329,9 +349,17 @@ function decideAlert(row: ObservationRow, profile: UserProfile): AlertDecision |
 
   if (row.signal_type === "infrastructure.mop.emergency") {
     if (!local || !isUrgentSeverity(severity)) return undefined;
+    const service = stringValue(payload.mopService);
+    const serviceKey = normalizeText(service);
+    const alertKey = serviceKey?.includes("vialidad")
+      ? "mop:vialidad"
+      : serviceKey?.includes("obras hidraulicas")
+        ? "mop:obras-hidraulicas"
+        : `mop:infraestructura:${slug(service ?? "general")}`;
     return makeDecision(
       row,
       profile,
+      alertKey,
       severity === "critical" || severity === "high" ? "critical" : "warning",
       relevance,
       distanceKm,
@@ -351,6 +379,7 @@ function decideAlert(row: ObservationRow, profile: UserProfile): AlertDecision |
     return makeDecision(
       row,
       profile,
+      "air-quality",
       level,
       relevance,
       distanceKm,
@@ -364,6 +393,7 @@ function decideAlert(row: ObservationRow, profile: UserProfile): AlertDecision |
     return makeDecision(
       row,
       profile,
+      `earthquake:${row.source_record_id ?? row.id}`,
       level,
       "proximity",
       distanceKm,
@@ -376,6 +406,7 @@ function decideAlert(row: ObservationRow, profile: UserProfile): AlertDecision |
     return makeDecision(
       row,
       profile,
+      `volcano:${row.source_record_id ?? row.id}`,
       severity === "critical" || severity === "high" ? "critical" : "warning",
       relevance,
       distanceKm,
@@ -384,6 +415,110 @@ function decideAlert(row: ObservationRow, profile: UserProfile): AlertDecision |
   }
 
   return undefined;
+}
+
+function consolidateDecisions(raw: AlertDecision[]): AlertDecision[] {
+  const groups = new Map<string, AlertDecision[]>();
+  for (const decision of raw) {
+    const group = groups.get(decision.alertKey) ?? [];
+    group.push(decision);
+    groups.set(decision.alertKey, group);
+  }
+
+  return [...groups.entries()].map(([alertKey, members]) => {
+    const uniqueMembers = dedupeMembers(alertKey, members);
+    const representative = [...uniqueMembers].sort(compareRepresentative)[0];
+    const level = uniqueMembers.reduce<PersonalAlertLevel>(
+      (current, member) => levelRank(member.level) > levelRank(current) ? member.level : current,
+      "watch",
+    );
+    const nearestKm = finiteMin(uniqueMembers.map((member) => member.distanceKm));
+    const criticalCount = uniqueMembers.filter((member) => member.level === "critical").length;
+    const warningCount = uniqueMembers.filter((member) => member.level === "warning").length;
+    const watchCount = uniqueMembers.filter((member) => member.level === "watch").length;
+    const evidenceRefs = [...new Set(
+      uniqueMembers.map((member) => stringValue(member.impact.evidence)).filter((value): value is string => Boolean(value)),
+    )];
+
+    return {
+      ...representative,
+      alertKey,
+      level,
+      distanceKm: nearestKm ?? representative.distanceKm,
+      reason: groupedReason(alertKey, uniqueMembers, representative, nearestKm, criticalCount),
+      impact: {
+        ...representative.impact,
+        alertKey,
+        grouped: uniqueMembers.length > 1,
+        observationCount: uniqueMembers.length,
+        rawObservationCount: members.length,
+        criticalCount,
+        warningCount,
+        watchCount,
+        nearestKm,
+        evidenceRefs,
+        memberObservationIds: uniqueMembers.map((member) => member.observationId),
+        members: uniqueMembers.slice(0, MAX_GROUP_MEMBERS_IN_IMPACT).map((member) => ({
+          observationId: member.observationId,
+          sourceId: member.sourceId,
+          sourceRecordId: member.sourceRecordId,
+          level: member.level,
+          distanceKm: member.distanceKm,
+          observedAt: member.observedAt,
+          value: member.impact.value,
+          unit: member.impact.unit,
+          details: member.impact.details,
+        })),
+      },
+    };
+  }).sort((a, b) => compareRepresentative(a, b));
+}
+
+function dedupeMembers(alertKey: string, members: AlertDecision[]): AlertDecision[] {
+  if (alertKey !== "mop:vialidad") return members;
+  const seen = new Set<string>();
+  const result: AlertDecision[] = [];
+  for (const member of [...members].sort(compareRepresentative)) {
+    const fingerprint = [
+      member.observedAt,
+      member.distanceKm === undefined ? "" : member.distanceKm.toFixed(3),
+      String(member.impact.value ?? ""),
+    ].join("|");
+    if (seen.has(fingerprint)) continue;
+    seen.add(fingerprint);
+    result.push(member);
+  }
+  return result;
+}
+
+function groupedReason(
+  alertKey: string,
+  members: AlertDecision[],
+  representative: AlertDecision,
+  nearestKm: number | undefined,
+  criticalCount: number,
+): string {
+  const nearest = nearestKm === undefined ? "en tu zona" : `a ${Math.round(nearestKm)} km`;
+  if (alertKey === "mop:vialidad") {
+    return `${members.length} ${members.length === 1 ? "emergencia vial MOP vigente" : "emergencias viales MOP vigentes"}; ${criticalCount} de nivel crítico. La más cercana está ${nearest}.`;
+  }
+  if (alertKey === "mop:obras-hidraulicas") {
+    return `${members.length} ${members.length === 1 ? "afectación de Obras Hidráulicas MOP vigente" : "afectaciones de Obras Hidráulicas MOP vigentes"}; ${criticalCount} de nivel crítico. La más cercana está ${nearest}.`;
+  }
+  if (alertKey.startsWith("mop:infraestructura:")) {
+    return `${members.length} ${members.length === 1 ? "afectación de infraestructura MOP vigente" : "afectaciones de infraestructura MOP vigentes"}; ${criticalCount} de nivel crítico. La más cercana está ${nearest}.`;
+  }
+  if (alertKey.startsWith("wildfire-risk:")) {
+    const maximum = finiteMax(members.map((member) => numericValue(member.impact.value)));
+    return `Pronóstico CONAF cercano para ${alertKey.slice("wildfire-risk:".length)}: máxima probabilidad de ignición ${maximum === undefined ? "sobre el umbral de alerta" : `${Math.round(maximum)}%`}. El área representativa más cercana está ${nearest}.`;
+  }
+  if (alertKey === "water:river-flow" && members.length > 1) {
+    return `DGA mantiene ${members.length} alertas fluviométricas relevantes; ${criticalCount} de nivel crítico. La más cercana está ${nearest}.`;
+  }
+  if (alertKey === "air-quality" && members.length > 1) {
+    return `SINCA reporta ${members.length} indicadores de calidad del aire en categoría de atención para tu zona.`;
+  }
+  return representative.reason;
 }
 
 function isCurrentObservation(row: ObservationRow, now: Date): boolean {
@@ -428,18 +563,23 @@ function isCurrentObservation(row: ObservationRow, now: Date): boolean {
 function makeDecision(
   row: ObservationRow,
   profile: UserProfile,
+  alertKey: string,
   level: PersonalAlertLevel,
   relevance: PersonalAlertRelevance,
   distanceKm: number | undefined,
   reason: string,
 ): AlertDecision {
+  const payload = object(row.normalized_payload);
   return {
+    alertKey,
     observationId: row.id,
     sourceId: row.source_id,
+    sourceRecordId: row.source_record_id ?? undefined,
     signalType: row.signal_type,
     level,
     relevance,
     distanceKm,
+    observedAt: iso(row.observed_at),
     reason,
     impact: {
       sourceName: row.source_name,
@@ -452,6 +592,14 @@ function makeDecision(
       value: scalar(row),
       unit: row.unit,
       evidence: row.raw_evidence_ref,
+      details: {
+        mopService: stringValue(payload.mopService),
+        affectedInfrastructure: stringValue(payload.affectedInfrastructure),
+        roadRole: stringValue(payload.roadRole),
+        emergency: stringValue(payload.emergency),
+        icapLabel: stringValue(payload.icapLabel),
+        sourceStatus: stringValue(payload.sourceStatus),
+      },
       profile: {
         homeRegion: profile.homeRegion,
         homeCommune: profile.homeCommune,
@@ -467,7 +615,6 @@ async function resolveMissingAlerts(
   database: SqlExecutor,
   userId: string,
   activeIds: string[],
-  sourceId?: string,
 ): Promise<number> {
   const rows = activeIds.length > 0
     ? await database.query<IdRow>(
@@ -476,10 +623,9 @@ async function resolveMissingAlerts(
           where user_id = $1
             and rule_version = $2
             and state = 'active'
-            and ($3::text is null or source_id = $3::text)
-            and not (id = any($4::text[]))
+            and not (id = any($3::text[]))
         returning id`,
-        [userId, PERSONAL_ALERT_RULE_VERSION, sourceId ?? null, activeIds],
+        [userId, PERSONAL_ALERT_RULE_VERSION, activeIds],
       )
     : await database.query<IdRow>(
         `update personal_alerts
@@ -487,10 +633,22 @@ async function resolveMissingAlerts(
           where user_id = $1
             and rule_version = $2
             and state = 'active'
-            and ($3::text is null or source_id = $3::text)
         returning id`,
-        [userId, PERSONAL_ALERT_RULE_VERSION, sourceId ?? null],
+        [userId, PERSONAL_ALERT_RULE_VERSION],
       );
+  return rows.length;
+}
+
+async function resolveLegacyAlerts(database: SqlExecutor, userId: string): Promise<number> {
+  const rows = await database.query<IdRow>(
+    `update personal_alerts
+        set state = 'resolved', resolved_at = coalesce(resolved_at, now()), updated_at = now()
+      where user_id = $1
+        and state = 'active'
+        and rule_version <> $2
+    returning id`,
+    [userId, PERSONAL_ALERT_RULE_VERSION],
+  );
   return rows.length;
 }
 
@@ -504,10 +662,23 @@ function createDb(): SqlExecutor {
   };
 }
 
-function personalAlertId(userId: string, observationId: string): string {
+function personalAlertId(userId: string, alertKey: string): string {
   return createHash("sha256")
-    .update(`${userId}:${observationId}:${PERSONAL_ALERT_RULE_VERSION}`)
+    .update(`${userId}:${alertKey}:${PERSONAL_ALERT_RULE_VERSION}`)
     .digest("hex");
+}
+
+function compareRepresentative(a: AlertDecision, b: AlertDecision): number {
+  const levelDelta = levelRank(b.level) - levelRank(a.level);
+  if (levelDelta !== 0) return levelDelta;
+  const aDistance = a.distanceKm ?? Number.POSITIVE_INFINITY;
+  const bDistance = b.distanceKm ?? Number.POSITIVE_INFINITY;
+  if (aDistance !== bDistance) return aDistance - bDistance;
+  return new Date(b.observedAt).getTime() - new Date(a.observedAt).getTime();
+}
+
+function levelRank(level: PersonalAlertLevel): number {
+  return level === "critical" ? 3 : level === "warning" ? 2 : 1;
 }
 
 function alertRelevance(row: ObservationRow): PersonalAlertRelevance {
@@ -543,11 +714,31 @@ function iso(value: string | Date): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
 
+function dateKey(value: string | Date | null): string {
+  if (!value) return "unknown";
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? "unknown" : date.toISOString().slice(0, 10);
+}
+
 function scalar(row: ObservationRow): number | string | boolean | undefined {
   if (row.value_numeric !== null) return row.value_numeric;
   if (row.value_text !== null) return row.value_text;
   if (row.value_boolean !== null) return row.value_boolean;
   return undefined;
+}
+
+function numericValue(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function finiteMin(values: Array<number | undefined>): number | undefined {
+  const finite = values.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  return finite.length > 0 ? Math.min(...finite) : undefined;
+}
+
+function finiteMax(values: Array<number | undefined>): number | undefined {
+  const finite = values.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  return finite.length > 0 ? Math.max(...finite) : undefined;
 }
 
 function object(value: unknown): Record<string, unknown> {
@@ -567,4 +758,8 @@ function normalizeText(value: string | null | undefined): string | undefined {
     .replace(/[\u0300-\u036f]/g, "")
     .trim()
     .toLowerCase();
+}
+
+function slug(value: string): string {
+  return normalizeText(value)?.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "general";
 }
