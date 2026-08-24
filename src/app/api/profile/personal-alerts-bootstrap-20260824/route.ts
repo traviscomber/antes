@@ -63,6 +63,43 @@ export async function GET() {
      where user_id = $1`,
     [userId],
   );
+  const breakdown = await sql.query(
+    `select
+       source_id,
+       signal_type,
+       level,
+       count(*)::int as alerts,
+       round(min(distance_km)::numeric, 1) as nearest_km,
+       max(last_seen_at) as last_seen_at
+     from personal_alerts
+     where user_id = $1 and state = 'active'
+     group by source_id, signal_type, level
+     order by alerts desc, source_id, signal_type, level`,
+    [userId],
+  );
+  const samples = await sql.query(
+    `select
+       source_id,
+       signal_type,
+       level,
+       round(distance_km::numeric, 1) as distance_km,
+       reason,
+       impact
+     from personal_alerts
+     where user_id = $1 and state = 'active'
+     order by
+       case level when 'critical' then 0 when 'warning' then 1 else 2 end,
+       distance_km nulls last,
+       source_id
+     limit 30`,
+    [userId],
+  );
 
-  return NextResponse.json({ ok: true, refresh, counts: counts[0] ?? null });
+  return NextResponse.json({
+    ok: true,
+    refresh,
+    counts: counts[0] ?? null,
+    breakdown,
+    samples,
+  });
 }
