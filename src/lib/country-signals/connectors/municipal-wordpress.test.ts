@@ -1,5 +1,4 @@
-import assert from "node:assert/strict";
-import test from "node:test";
+import { describe, expect, it } from "vitest";
 import {
   parseMunicipalWordpressPosts,
   type MunicipalWordpressConfig,
@@ -16,26 +15,28 @@ const config: MunicipalWordpressConfig = {
   priority: "P1",
 };
 
-test("municipal parser is reusable across configured communes and rejects foreign hosts", () => {
-  const now = "2026-08-24T18:00:00.000Z";
-  const posts = parseMunicipalWordpressPosts([
-    {
-      id: 10,
-      date_gmt: "2026-08-24T16:00:00",
-      link: "https://prueba.cl/2026/corte-de-transito",
-      title: { rendered: "Corte de tránsito por emergencia" },
-      excerpt: { rendered: "Cierre de calle por emergencia comunal." },
-    },
-    {
-      id: 11,
-      date_gmt: "2026-08-24T16:30:00",
-      link: "https://otro-municipio.cl/noticia",
-      title: { rendered: "Emergencia" },
-      excerpt: { rendered: "Corte de tránsito." },
-    },
-  ], now, config);
+describe("municipal WordPress territorial adapter", () => {
+  it("is reusable across configured communes and rejects foreign hosts", () => {
+    const now = "2026-08-24T18:00:00.000Z";
+    const posts = parseMunicipalWordpressPosts([
+      {
+        id: 10,
+        date_gmt: "2026-08-24T16:00:00",
+        link: "https://prueba.cl/2026/corte-de-transito",
+        title: { rendered: "Corte de tránsito por emergencia" },
+        excerpt: { rendered: "Cierre de calle por emergencia comunal." },
+      },
+      {
+        id: 11,
+        date_gmt: "2026-08-24T16:30:00",
+        link: "https://otro-municipio.cl/noticia",
+        title: { rendered: "Emergencia" },
+        excerpt: { rendered: "Corte de tránsito." },
+      },
+    ], now, config);
 
-  assert.equal(posts.length, 1);
-  assert.equal(posts[0]?.recordId, "10");
-  assert.deepEqual(posts[0]?.topics.sort(), ["closure", "emergency"]);
+    expect(posts).toHaveLength(1);
+    expect(posts[0]?.recordId).toBe("10");
+    expect(posts[0]?.topics.sort()).toEqual(["closure", "emergency"]);
+  });
 });
