@@ -2,24 +2,32 @@ import { BancoCentralConnector } from "./connectors/banco-central";
 import { CneGenerationConnector } from "./connectors/cne-generation";
 import { DmcWrfConnector } from "./connectors/dmc";
 import { LeyChileConnector } from "./connectors/leychile";
+import {
+  BorderCrossingsConnector,
+  DgaAlertsConnector,
+  MopInfrastructureEmergenciesConnector,
+  VialidadEmergenciesConnector,
+} from "./connectors/mop-arcgis";
 import { ObservatorioLogisticoConnector } from "./connectors/observatorio-logistico";
 import { chileSignalSources } from "./registry";
 import type { SourceHealth } from "./types";
 
 export async function getChileSignalHealth(): Promise<SourceHealth[]> {
-  const dmc = new DmcWrfConnector();
-  const logistics = new ObservatorioLogisticoConnector();
-  const leychile = new LeyChileConnector();
-  const bancoCentral = new BancoCentralConnector();
-  const cneGeneration = new CneGenerationConnector();
+  const connectors = [
+    new DmcWrfConnector(),
+    new ObservatorioLogisticoConnector(),
+    new LeyChileConnector(),
+    new DgaAlertsConnector(),
+    new VialidadEmergenciesConnector(),
+    new BorderCrossingsConnector(),
+    new MopInfrastructureEmergenciesConnector(),
+    new BancoCentralConnector(),
+    new CneGenerationConnector(),
+  ];
 
-  const activeChecks = new Map<string, Promise<SourceHealth>>([
-    [dmc.source.id, dmc.healthCheck()],
-    [logistics.source.id, logistics.healthCheck()],
-    [leychile.source.id, leychile.healthCheck()],
-    [bancoCentral.source.id, bancoCentral.healthCheck()],
-    [cneGeneration.source.id, cneGeneration.healthCheck()],
-  ]);
+  const activeChecks = new Map<string, Promise<SourceHealth>>(
+    connectors.map((connector) => [connector.source.id, connector.healthCheck()]),
+  );
 
   return Promise.all(
     chileSignalSources.map(async (source) => {
