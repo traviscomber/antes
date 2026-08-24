@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
-import { refreshPersonalAlertsForAllUsersWithWater } from "@/lib/profile/personal-alerts-water-service";
+import { refreshPersonalAlertsForAllCriticalSources } from "@/lib/profile/personal-alerts-critical-sources";
 import {
   getUserProfile,
   saveUserProfile,
@@ -65,9 +65,6 @@ export async function POST(request: NextRequest) {
       homeLongitude = existing?.homeLongitude;
     }
 
-    // If the place text changed without a newly confirmed browser location, the
-    // previous coordinates are intentionally cleared rather than reused for a
-    // different commune/region.
     await saveUserProfile(session.userId, {
       homeRegion,
       homeCommune,
@@ -82,14 +79,11 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Recalculate the complete surface, including service-company alerts such as
-    // Aguas Décima, immediately after a profile/location change. Profile updates
-    // are infrequent and the batch is capped, so this avoids a temporary gap until
-    // the next five-minute source cron without weakening existing alert rules.
-    await refreshPersonalAlertsForAllUsersWithWater();
+    // Recalculate official regional and local service alerts immediately after a
+    // location change so DMC/Aguas Décima relevance does not wait for the next cron.
+    await refreshPersonalAlertsForAllCriticalSources();
   } catch (error) {
-    // The profile is canonical user input and must remain saved even if a derived
-    // alert refresh fails. The next successful source ingestion will retry it.
+    // Profile data remains canonical even if derived alert projection temporarily fails.
     console.error("Personal alert refresh failed after profile update", error);
   }
 
