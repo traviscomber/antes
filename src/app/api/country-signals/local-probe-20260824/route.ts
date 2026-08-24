@@ -8,52 +8,26 @@ const UA = "N3uralia-ANTEMANO/0.1 (+https://www.antemano.app)";
 
 export async function GET() {
   const results: Record<string, unknown> = {};
-
-  results.sec = await probeSec();
-  results.senapred = await probeText("https://t.me/s/SenapredChile");
-  results.aguasDecimaCurrent = await probeText("https://www.aguasdecima.cl/emergencias/cortes-en-proceso");
-  results.aguasDecimaScheduled = await probeText("https://www.aguasdecima.cl/emergencias/cortes-programados");
-  results.aguasDecimaEmergency = await probeText("https://www.aguasdecima.cl/emergencias/cortes-de-emergencia");
+  results.saesaMain = await probeScript("https://desconexiones.gruposaesa.cl/static/js/main.eb7077f8.chunk.js");
+  results.saesaCache = await probeScript("https://desconexiones.gruposaesa.cl/scriptCache.js");
   results.saesaScheduled = await probeText("https://www.gruposaesa.cl/saesa/desconexiones-programadas/");
-  results.saesaMap = await probeText("https://desconexiones.gruposaesa.cl/mapa?empresa=S");
+  results.senapred = await probeText("https://t.me/s/SenapredChile");
   results.rioenlineaFeed = await probeText("https://www.rioenlinea.cl/feed/");
-  results.diarioValdiviaFeed = await probeText("https://diariodevaldivia.cl/feed/");
-  results.diarioSostenibleFeed = await probeText("https://www.diariosostenible.cl/feed/");
-
   return NextResponse.json({ ok: true, results });
 }
 
-async function probeSec() {
+async function probeScript(url: string) {
   try {
-    const base = "https://apps.sec.cl/INTONLINEv1/ClientesAfectados/";
-    const seriesResponse = await fetch(`${base}Get`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "User-Agent": UA },
-      body: "{}",
+    const response = await fetch(url, {
+      headers: { Accept: "application/javascript,text/javascript,*/*;q=0.8", "User-Agent": UA },
       cache: "no-store",
-      signal: AbortSignal.timeout(15_000),
+      redirect: "follow",
+      signal: AbortSignal.timeout(20_000),
     });
-    const seriesText = await seriesResponse.text();
-    const series = JSON.parse(seriesText) as Array<Record<string, unknown>>;
-    const last = Array.isArray(series) ? series.at(-1) : undefined;
-    let rows: unknown[] = [];
-    if (last) {
-      const detailResponse = await fetch(`${base}GetPorFecha`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "User-Agent": UA },
-        body: JSON.stringify({ anho: last.anho, mes: last.mes, dia: last.dia, hora: last.hora }),
-        cache: "no-store",
-        signal: AbortSignal.timeout(15_000),
-      });
-      const detailText = await detailResponse.text();
-      rows = JSON.parse(detailText) as unknown[];
-    }
-    const losRios = rows.filter((row) => {
-      if (!row || typeof row !== "object") return false;
-      const region = String((row as Record<string, unknown>).NOMBRE_REGION ?? "").toLowerCase();
-      return region.includes("rios");
-    });
-    return { status: seriesResponse.status, seriesCount: series.length, last, detailCount: rows.length, losRios: losRios.slice(0, 10) };
+    const text = await response.text();
+    const absolute = Array.from(new Set(text.match(/https?:\\?\/\\?\/[^"'`\\s)]+/g) ?? [])).slice(0, 80);
+    const apiLike = Array.from(new Set(text.match(/["'`]([^"'`]{0,120}(?:api|desconexion|interrup|corte|mapa)[^"'`]{0,160})["'`]/gi) ?? [])).slice(0, 100);
+    return { status: response.status, length: text.length, absolute, apiLike };
   } catch (error) {
     return { error: error instanceof Error ? error.message : String(error) };
   }
@@ -72,10 +46,7 @@ async function probeText(url: string) {
       status: response.status,
       contentType: response.headers.get("content-type"),
       length: text.length,
-      hasItem: /<item\b/i.test(text),
-      hasEntry: /<entry\b/i.test(text),
-      scriptSrcs: Array.from(text.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)).slice(0, 12).map((match) => match[1]),
-      sample: text.slice(0, 1200).replace(/\s+/g, " "),
+      sample: text.slice(0, 3000).replace(/\s+/g, " "),
     };
   } catch (error) {
     return { error: error instanceof Error ? error.message : String(error) };
