@@ -4,10 +4,12 @@ import { DmcWrfConnector } from "./connectors/dmc";
 import { LeyChileConnector } from "./connectors/leychile";
 import {
   BorderCrossingsConnector,
-  DgaAlertsConnector,
-  MopInfrastructureEmergenciesConnector,
   VialidadEmergenciesConnector,
 } from "./connectors/mop-arcgis";
+import {
+  DgaDirectAlertsConnector,
+  MopAllInfrastructureEmergenciesConnector,
+} from "./connectors/mop-live-overrides";
 import { ObservatorioLogisticoConnector } from "./connectors/observatorio-logistico";
 import { chileSignalSources } from "./registry";
 import type { SourceHealth } from "./types";
@@ -17,10 +19,10 @@ export async function getChileSignalHealth(): Promise<SourceHealth[]> {
     new DmcWrfConnector(),
     new ObservatorioLogisticoConnector(),
     new LeyChileConnector(),
-    new DgaAlertsConnector(),
+    new DgaDirectAlertsConnector(),
     new VialidadEmergenciesConnector(),
     new BorderCrossingsConnector(),
-    new MopInfrastructureEmergenciesConnector(),
+    new MopAllInfrastructureEmergenciesConnector(),
     new BancoCentralConnector(),
     new CneGenerationConnector(),
   ];
