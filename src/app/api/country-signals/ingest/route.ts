@@ -3,7 +3,7 @@ import { getSession, isAdmin } from "@/lib/auth/session";
 import { createCountrySignalConnector } from "@/lib/country-signals/connectors/catalog";
 import { runCountrySignalIngestion } from "@/lib/country-signals/ingestion";
 import { createNeonCountrySignalStore } from "@/lib/country-signals/neon-store";
-import { refreshPersonalAlertsForAllUsersWithWater } from "@/lib/profile/personal-alerts-water-service";
+import { refreshPersonalAlertsForAllCriticalSources } from "@/lib/profile/personal-alerts-critical-sources";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,9 +40,9 @@ export async function POST(request: NextRequest) {
       createNeonCountrySignalStore(),
     );
 
-    let personalAlerts: Awaited<ReturnType<typeof refreshPersonalAlertsForAllUsersWithWater>> | undefined;
+    let personalAlerts: Awaited<ReturnType<typeof refreshPersonalAlertsForAllCriticalSources>> | undefined;
     try {
-      personalAlerts = await refreshPersonalAlertsForAllUsersWithWater({ sourceId: result.sourceId });
+      personalAlerts = await refreshPersonalAlertsForAllCriticalSources({ sourceId: result.sourceId });
     } catch (error) {
       // Canonical ingestion must remain successful even if a derived user alert
       // projection fails. A later ingestion/profile save retries the projection.
