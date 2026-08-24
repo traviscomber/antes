@@ -60,9 +60,20 @@ function computeBounds(lat: number, lon: number, points: MapPoint[]): Bounds {
   const lonPad = Math.max((maxLon - minLon) * .18, .045);
   return { south: minLat - latPad, north: maxLat + latPad, west: minLon - lonPad, east: maxLon + lonPad };
 }
+
 function markerStyle(lat: number, lon: number, b: Bounds): CSSProperties {
   const left = ((lon - b.west) / (b.east - b.west)) * 100;
-  const top = (1 - (lat - b.south) / (b.north - b.south)) * 100;
+  const northY = mercatorY(b.north);
+  const southY = mercatorY(b.south);
+  const pointY = mercatorY(lat);
+  const top = ((northY - pointY) / (northY - southY)) * 100;
   return { left: `${Math.max(1, Math.min(99, left))}%`, top: `${Math.max(1, Math.min(99, top))}%` };
 }
+
+function mercatorY(latitude: number) {
+  const clamped = Math.max(-85.05112878, Math.min(85.05112878, latitude));
+  const radians = clamped * Math.PI / 180;
+  return Math.log(Math.tan(Math.PI / 4 + radians / 2));
+}
+
 function osmEmbed(b: Bounds) { return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(`${b.west},${b.south},${b.east},${b.north}`)}&layer=mapnik`; }
