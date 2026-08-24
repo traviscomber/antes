@@ -22,6 +22,10 @@ export interface PersonalAlertBatchResult {
   resolvedAlerts: number;
 }
 
+interface SqlExecutor {
+  query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<T[]>;
+}
+
 type ObservationRow = {
   id: string;
   source_id: string;
@@ -70,36 +74,35 @@ export async function refreshPersonalAlertsForUser(
   userId: string,
   options: { sourceId?: string } = {},
 ): Promise<PersonalAlertRefreshResult> {
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) throw new Error("DATABASE_URL is required for personal alert processing.");
-
-  const sql = neon(databaseUrl);
+  const database = createDb();
   const profile = await getUserProfile(userId);
+
   if (!profileHasLocation(profile)) {
-    const resolved = await resolveMissingAlerts(sql, userId, [], options.sourceId);
+    const resolvedAlerts = await resolveMissingAlerts(database, userId, [], options.sourceId);
     return {
       userId,
       sourceId: options.sourceId,
       observationsEvaluated: 0,
       decisionsMatched: 0,
       activeAlerts: 0,
-      resolvedAlerts: resolved,
+      resolvedAlerts,
     };
   }
 
-  const rows = await loadRelevantObservations(sql, profile, options.sourceId);
+  const observations = await loadRelevantObservations(database, profile, options.sourceId);
   const now = new Date();
-  const decisions = rows
+  const decisions = observations
     .filter((row) => isCurrentObservation(row, now))
     .map((row) => decideAlert(row, profile))
     .filter((value): value is AlertDecision => value !== undefined);
 
   const activeIds: string[] = [];
   let activeAlerts = 0;
+
   for (const decision of decisions) {
-    const alertId = personalAlertId(userId, decision.observationId);
-    activeIds.push(alertId);
-    const rows = await sql.query(
+    const id = personalAlertId(userId, decision.observationId);
+    activeIds.push(id);
+    const rows = await database.query<StateRow>(
       `insert into personal_alerts (
          id, user_id, observation_id, source_id, signal_type, state, level,
          relevance, distance_km, rule_version, reason, impact,
@@ -120,7 +123,7 @@ export async function refreshPersonalAlertsForUser(
          updated_at = now()
        returning state`,
       [
-        alertId,
+        id,
         userId,
         decision.observationId,
         decision.sourceId,
@@ -132,15 +135,15 @@ export async function refreshPersonalAlertsForUser(
         decision.reason,
         JSON.stringify(decision.impact),
       ],
-    ) as StateRow[];
+    );
     if (rows[0]?.state === "active") activeAlerts += 1;
   }
 
-  const resolvedAlerts = await resolveMissingAlerts(sql, userId, activeIds, options.sourceId);
+  const resolvedAlerts = await resolveMissingAlerts(database, userId, activeIds, options.sourceId);
   return {
     userId,
     sourceId: options.sourceId,
-    observationsEvaluated: rows.length,
+    observationsEvaluated: observations.length,
     decisionsMatched: decisions.length,
     activeAlerts,
     resolvedAlerts,
@@ -150,10 +153,8 @@ export async function refreshPersonalAlertsForUser(
 export async function refreshPersonalAlertsForAllUsers(
   options: { sourceId?: string } = {},
 ): Promise<PersonalAlertBatchResult> {
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) throw new Error("DATABASE_URL is required for personal alert processing.");
-  const sql = neon(databaseUrl);
-  const users = await sql.query(
+  const database = createDb();
+  const users = await database.query<UserIdRow>(
     `select user_id::text as user_id
        from user_profiles
       where home_commune is not null
@@ -162,7 +163,7 @@ export async function refreshPersonalAlertsForAllUsers(
       order by updated_at desc
       limit $1`,
     [MAX_USERS_PER_PASS],
-  ) as UserIdRow[];
+  );
 
   let activeAlerts = 0;
   let resolvedAlerts = 0;
@@ -172,19 +173,15 @@ export async function refreshPersonalAlertsForAllUsers(
     resolvedAlerts += result.resolvedAlerts;
   }
 
-  return {
-    usersEvaluated: users.length,
-    activeAlerts,
-    resolvedAlerts,
-  };
+  return { usersEvaluated: users.length, activeAlerts, resolvedAlerts };
 }
 
 async function loadRelevantObservations(
-  sql: ReturnType<typeof neon>,
+  database: SqlExecutor,
   profile: UserProfile,
   sourceId?: string,
 ): Promise<ObservationRow[]> {
-  const rows = await sql.query(
+  return database.query<ObservationRow>(
     `with latest_version as (
        select
          eo.id,
@@ -266,7 +263,6 @@ async function loadRelevantObservations(
       MAX_CANDIDATES,
     ],
   );
-  return rows as ObservationRow[];
 }
 
 function decideAlert(row: ObservationRow, profile: UserProfile): AlertDecision | undefined {
@@ -282,16 +278,22 @@ function decideAlert(row: ObservationRow, profile: UserProfile): AlertDecision |
     const distance = distanceKm ?? 0;
     if (distance > 80) return undefined;
     const level: PersonalAlertLevel = distance <= 20 ? "critical" : distance <= 50 ? "warning" : "watch";
-    return decision(row, profile, level, relevance, distanceKm,
+    return makeDecision(
+      row,
+      profile,
+      level,
+      relevance,
+      distanceKm,
       distanceKm !== undefined
         ? `Incendio activo reportado por CONAF a ${Math.round(distanceKm)} km de tu ubicación.`
-        : "Incendio activo reportado por CONAF en tu comuna.");
+        : "Incendio activo reportado por CONAF en tu comuna.",
+    );
   }
 
   if (row.signal_type === "fire.ignition_probability.forecast") {
     if (value === null || value < 70 || !local) return undefined;
     const level: PersonalAlertLevel = value >= 90 ? "critical" : value >= 80 ? "warning" : "watch";
-    return decision(
+    return makeDecision(
       row,
       profile,
       level,
@@ -303,7 +305,7 @@ function decideAlert(row: ObservationRow, profile: UserProfile): AlertDecision |
 
   if (row.signal_type === "water.river.flow_alert") {
     if (!local || !isUrgentSeverity(severity)) return undefined;
-    return decision(
+    return makeDecision(
       row,
       profile,
       severity === "critical" || severity === "high" ? "critical" : "warning",
@@ -315,7 +317,7 @@ function decideAlert(row: ObservationRow, profile: UserProfile): AlertDecision |
 
   if (row.signal_type === "logistics.road.emergency") {
     if (!local || !isUrgentSeverity(severity)) return undefined;
-    return decision(
+    return makeDecision(
       row,
       profile,
       severity === "critical" || severity === "high" ? "critical" : "warning",
@@ -327,7 +329,7 @@ function decideAlert(row: ObservationRow, profile: UserProfile): AlertDecision |
 
   if (row.signal_type === "infrastructure.mop.emergency") {
     if (!local || !isUrgentSeverity(severity)) return undefined;
-    return decision(
+    return makeDecision(
       row,
       profile,
       severity === "critical" || severity === "high" ? "critical" : "warning",
@@ -339,29 +341,27 @@ function decideAlert(row: ObservationRow, profile: UserProfile): AlertDecision |
 
   if (row.signal_type.startsWith("environment.air_quality.")) {
     if (!local) return undefined;
-    const status = normalizeText(
-      stringValue(payload.icapLabel) ?? stringValue(payload.sourceStatus),
-    );
-    if (!status) return undefined;
+    const label = stringValue(payload.icapLabel) ?? stringValue(payload.sourceStatus);
+    const status = normalizeText(label);
     let level: PersonalAlertLevel | undefined;
-    if (status.includes("emergencia") && !status.includes("preemergencia")) level = "critical";
-    else if (status.includes("preemergencia")) level = "warning";
-    else if (status.includes("alerta")) level = "watch";
+    if (status?.includes("emergencia") && !status.includes("preemergencia")) level = "critical";
+    else if (status?.includes("preemergencia")) level = "warning";
+    else if (status?.includes("alerta")) level = "watch";
     if (!level) return undefined;
-    return decision(
+    return makeDecision(
       row,
       profile,
       level,
       relevance,
       distanceKm,
-      `SINCA reporta calidad del aire en categoría ${stringValue(payload.icapLabel) ?? stringValue(payload.sourceStatus) ?? "de atención"} en tu zona.`,
+      `SINCA reporta calidad del aire en categoría ${label ?? "de atención"} en tu zona.`,
     );
   }
 
   if (row.signal_type === "seismic.earthquake.event") {
     if (value === null || value < 4.5 || distanceKm === undefined || distanceKm > 80) return undefined;
     const level: PersonalAlertLevel = value >= 6.5 ? "critical" : value >= 5.5 ? "warning" : "watch";
-    return decision(
+    return makeDecision(
       row,
       profile,
       level,
@@ -373,13 +373,13 @@ function decideAlert(row: ObservationRow, profile: UserProfile): AlertDecision |
 
   if (row.signal_type === "geophysical.volcano.alert") {
     if (!isUrgentSeverity(severity) || (relevance === "region" && distanceKm === undefined)) return undefined;
-    return decision(
+    return makeDecision(
       row,
       profile,
       severity === "critical" || severity === "high" ? "critical" : "warning",
       relevance,
       distanceKm,
-      `SERNAGEOMIN reporta una alerta volcánica relevante para tu ubicación.`,
+      "SERNAGEOMIN reporta una alerta volcánica relevante para tu ubicación.",
     );
   }
 
@@ -425,7 +425,7 @@ function isCurrentObservation(row: ObservationRow, now: Date): boolean {
   }
 }
 
-function decision(
+function makeDecision(
   row: ObservationRow,
   profile: UserProfile,
   level: PersonalAlertLevel,
@@ -464,13 +464,13 @@ function decision(
 }
 
 async function resolveMissingAlerts(
-  sql: ReturnType<typeof neon>,
+  database: SqlExecutor,
   userId: string,
   activeIds: string[],
   sourceId?: string,
 ): Promise<number> {
   const rows = activeIds.length > 0
-    ? await sql.query(
+    ? await database.query<IdRow>(
         `update personal_alerts
             set state = 'resolved', resolved_at = now(), updated_at = now()
           where user_id = $1
@@ -480,8 +480,8 @@ async function resolveMissingAlerts(
             and not (id = any($4::text[]))
         returning id`,
         [userId, PERSONAL_ALERT_RULE_VERSION, sourceId ?? null, activeIds],
-      ) as IdRow[]
-    : await sql.query(
+      )
+    : await database.query<IdRow>(
         `update personal_alerts
             set state = 'resolved', resolved_at = now(), updated_at = now()
           where user_id = $1
@@ -490,8 +490,18 @@ async function resolveMissingAlerts(
             and ($3::text is null or source_id = $3::text)
         returning id`,
         [userId, PERSONAL_ALERT_RULE_VERSION, sourceId ?? null],
-      ) as IdRow[];
+      );
   return rows.length;
+}
+
+function createDb(): SqlExecutor {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) throw new Error("DATABASE_URL is required for personal alert processing.");
+  const sql = neon(databaseUrl);
+  return {
+    query: async <T = Record<string, unknown>>(text: string, params: unknown[] = []) =>
+      (await sql.query(text, params)) as T[],
+  };
 }
 
 function personalAlertId(userId: string, observationId: string): string {
