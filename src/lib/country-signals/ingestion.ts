@@ -8,6 +8,7 @@ export interface IngestionExecutionResult {
   recordsNormalized: number;
   accepted: number;
   duplicates: number;
+  healthMessage?: string;
 }
 
 export async function runCountrySignalIngestion(
@@ -46,6 +47,7 @@ export async function runCountrySignalIngestion(
       recordsNormalized: batch.observations.length,
       accepted: writeResult.accepted,
       duplicates: writeResult.duplicates,
+      healthMessage: batch.sourceHealth.message,
     };
   } catch (error) {
     await store.finishIngestionRun(run.id, {

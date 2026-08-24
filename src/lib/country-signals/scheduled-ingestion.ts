@@ -9,6 +9,7 @@ export type ScheduledSourceResult = {
   accepted: number;
   duplicates: number;
   recordsNormalized: number;
+  healthMessage?: string;
   error?: string;
 };
 
@@ -56,6 +57,7 @@ export async function runScheduledCountrySignalIngestion(
           accepted: result.accepted,
           duplicates: result.duplicates,
           recordsNormalized: result.recordsNormalized,
+          healthMessage: result.healthMessage,
         };
       } catch (error) {
         return {
