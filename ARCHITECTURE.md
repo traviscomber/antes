@@ -1,8 +1,8 @@
-# ANTES — Arquitectura MVP
+# ANTEMANO — Arquitectura MVP
 
 ## Objetivo
 
-ANTES debe transformar señales operacionales dispersas en eventos anticipatorios accionables sin reemplazar los sistemas existentes del cliente.
+ANTEMANO debe transformar señales operacionales dispersas en eventos anticipatorios accionables sin reemplazar los sistemas existentes del cliente.
 
 El MVP prioriza cuatro propiedades:
 
@@ -28,7 +28,7 @@ EVENTOS CANDIDATOS
   ↓
 CORRELACIÓN
   ↓
-EVENTO ANTES
+EVENTO ANTEMANO
   ↓
 DEPENDENCIAS + IMPACTO
   ↓
@@ -41,7 +41,7 @@ RESULTADO
 MEMORIA / APRENDIZAJE
 ```
 
-ANTES debe integrarse por encima de ERP, MES, SCADA, WMS, TMS, CRM, IoT y fuentes externas. El sistema de origen continúa siendo dueño de sus hechos.
+ANTEMANO debe integrarse por encima de ERP, MES, SCADA, WMS, TMS, CRM, IoT y fuentes externas. El sistema de origen continúa siendo dueño de sus hechos.
 
 ---
 
@@ -68,7 +68,7 @@ Cada conector debe declarar:
 - identificador de idempotencia;
 - clasificación de sensibilidad.
 
-Los conectores no deben convertir silenciosamente una fuente externa en verdad canónica de ANTES.
+Los conectores no deben convertir silenciosamente una fuente externa en verdad canónica de ANTEMANO.
 
 ---
 
@@ -188,7 +188,7 @@ Para altos volúmenes se podrá particionar por tiempo y organización. No se ag
 
 ## 5. Detección y modelos
 
-ANTES puede ejecutar distintos tipos de detectores:
+ANTEMANO puede ejecutar distintos tipos de detectores:
 
 - reglas determinísticas;
 - detección de anomalías;
@@ -309,7 +309,7 @@ En el MVP las acciones críticas requieren aprobación humana.
 
 ---
 
-## 10. ANTES Memory
+## 10. ANTEMANO Memory
 
 La memoria operacional cierra el ciclo:
 
@@ -373,7 +373,7 @@ Los writes críticos deben soportar idempotencia y auditoría.
 
 ## 13. Seguridad y tenancy
 
-ANTES se diseña multi-organización desde el inicio.
+ANTEMANO se diseña multi-organización desde el inicio.
 
 Todos los recursos protegidos deben tener una ruta explícita hacia `organization_id`.
 
@@ -461,4 +461,4 @@ La selección exacta de proveedor debe hacerse cuando existan requisitos de desp
 - vector database para datos estructurados;
 - infraestructura multi-cloud antes del primer piloto.
 
-El MVP debe demostrar una cosa: **ANTES puede crear tiempo útil antes de un impacto real.**
+El MVP debe demostrar una cosa: **ANTEMANO puede crear tiempo útil antes de un impacto real.**
