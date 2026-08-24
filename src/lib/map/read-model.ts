@@ -31,19 +31,41 @@ export async function getMapPoints(latitude: number, longitude: number): Promise
   if (!databaseUrl) return [];
   const sql = neon(databaseUrl);
   const rows = await sql.query(`
-    select o.id, o.source_id, coalesce(s.name,o.source_id) source_name, s.canonical_url, o.source_url,
-      o.signal_type, o.severity, o.observed_at, o.latitude, o.longitude, o.region, o.commune,
-      o.value_numeric, o.value_text, o.value_boolean, o.unit,
-      111.195 * sqrt(power(o.latitude-$1,2)+power((o.longitude-$2)*cos(radians($1)),2)) as distance_km
-    from external_observations o
-    left join signal_sources s on s.id=o.source_id
-    where o.latitude is not null and o.longitude is not null
-      and (o.valid_until is null or o.valid_until >= now() - interval '24 hours')
-      and o.observed_at >= now() - interval '14 days'
-      and 111.195 * sqrt(power(o.latitude-$1,2)+power((o.longitude-$2)*cos(radians($1)),2)) <= 120
+    with candidates as (
+      select o.id, o.source_id, o.source_record_id,
+        coalesce(s.name,o.source_id) source_name, s.canonical_url, o.source_url,
+        o.signal_type, o.severity, o.observed_at, o.latitude, o.longitude, o.region, o.commune,
+        o.value_numeric, o.value_text, o.value_boolean, o.unit,
+        111.195 * sqrt(power(o.latitude-$1,2)+power((o.longitude-$2)*cos(radians($1)),2)) as distance_km
+      from external_observations o
+      left join signal_sources s on s.id=o.source_id
+      where o.latitude is not null and o.longitude is not null
+        and (o.valid_until is null or o.valid_until >= now() - interval '24 hours')
+        and o.observed_at >= now() - interval '14 days'
+    ), latest as (
+      select distinct on (source_id, coalesce(source_record_id,id)) *
+      from candidates
+      where distance_km <= 120
+      order by source_id, coalesce(source_record_id,id), observed_at desc
+    ), balanced as (
+      select *, row_number() over (
+        partition by source_id
+        order by
+          case severity when 'critical' then 0 when 'high' then 1 when 'warning' then 2 when 'watch' then 3 else 4 end,
+          distance_km,
+          observed_at desc
+      ) as source_rank
+      from latest
+    )
+    select id, source_id, source_name, canonical_url, source_url,
+      signal_type, severity, observed_at, latitude, longitude, region, commune,
+      value_numeric, value_text, value_boolean, unit, distance_km
+    from balanced
+    where source_rank <= 100
     order by
-      case o.severity when 'critical' then 0 when 'high' then 1 when 'warning' then 2 when 'watch' then 3 else 4 end,
-      o.observed_at desc
+      case severity when 'critical' then 0 when 'high' then 1 when 'warning' then 2 when 'watch' then 3 else 4 end,
+      distance_km,
+      observed_at desc
     limit 500`, [latitude, longitude]) as Row[];
 
   return rows.map((row) => ({
