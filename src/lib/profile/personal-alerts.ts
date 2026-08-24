@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
 import { getUserProfile, type UserProfile } from "./user-profile";
 
-export const PERSONAL_ALERT_RULE_VERSION = "personal-alerts@2";
+export const PERSONAL_ALERT_RULE_VERSION = "personal-alerts@3";
 
 export type PersonalAlertLevel = "watch" | "warning" | "critical";
 export type PersonalAlertRelevance = "commune" | "region" | "proximity" | "preference";
@@ -288,6 +288,70 @@ function decideAlert(row: ObservationRow, profile: UserProfile): AlertDecision |
   const value = row.value_numeric;
   const payload = object(row.normalized_payload);
 
+  if (row.signal_type === "emergency.senapred.official_alert") {
+    const message = stringValue(payload.message) ?? row.value_text ?? "comunicación oficial";
+    const level: PersonalAlertLevel = severity === "critical"
+      ? "critical"
+      : severity === "high" || severity === "warning"
+        ? "warning"
+        : "watch";
+    return makeDecision(
+      row,
+      profile,
+      `senapred:${row.source_record_id ?? row.id}`,
+      level,
+      relevance,
+      distanceKm,
+      `SENAPRED emitió una comunicación oficial relevante para tu zona: ${truncate(message, 180)}`,
+    );
+  }
+
+  if (row.signal_type === "energy.power.outage.current") {
+    if (!local) return undefined;
+    const confidence = normalizeText(stringValue(payload.currentStateConfidence));
+    const level: PersonalAlertLevel = confidence === "hypothetical"
+      ? "watch"
+      : severity === "critical" || severity === "high"
+        ? "critical"
+        : severity === "warning"
+          ? "warning"
+          : "watch";
+    const clients = value === null ? undefined : Math.max(0, Math.round(value));
+    return makeDecision(
+      row,
+      profile,
+      "power:outage:current",
+      level,
+      relevance,
+      distanceKm,
+      confidence === "hypothetical"
+        ? `SAESA muestra una posible interrupción eléctrica ${distanceKm !== undefined ? `a ${Math.round(distanceKm)} km` : "en tu comuna"}; el estado aún figura como hipotético.`
+        : `SAESA reporta un corte eléctrico vigente ${distanceKm !== undefined ? `a ${Math.round(distanceKm)} km` : "en tu comuna"}${clients === undefined ? "" : `, con ${clients} clientes afectados`}.`,
+    );
+  }
+
+  if (row.signal_type === "energy.power.outage.scheduled") {
+    const closeEnough = relevance === "commune" || (distanceKm !== undefined && distanceKm <= 25);
+    if (!closeEnough) return undefined;
+    const start = time(row.valid_from);
+    const now = Date.now();
+    if (start !== undefined && start > now + 48 * 3_600_000) return undefined;
+    const hoursUntil = start === undefined ? undefined : Math.max(0, start - now) / 3_600_000;
+    const clients = value === null ? undefined : Math.max(0, Math.round(value));
+    const level: PersonalAlertLevel = (hoursUntil !== undefined && hoursUntil <= 12) || (clients ?? 0) >= 500
+      ? "warning"
+      : "watch";
+    return makeDecision(
+      row,
+      profile,
+      "power:outage:scheduled",
+      level,
+      relevance,
+      distanceKm,
+      `SAESA tiene un corte programado ${distanceKm !== undefined ? `a ${Math.round(distanceKm)} km` : "en tu comuna"}${hoursUntil === undefined ? "" : `, previsto en ${Math.max(1, Math.round(hoursUntil))} h`}${clients === undefined ? "" : ` para ${clients} clientes`}.`,
+    );
+  }
+
   if (row.signal_type === "fire.wildfire.active") {
     if (relevance === "region" && distanceKm === undefined) return undefined;
     const distance = distanceKm ?? 0;
@@ -508,6 +572,13 @@ function groupedReason(
   if (alertKey.startsWith("mop:infraestructura:")) {
     return `${members.length} ${members.length === 1 ? "afectación de infraestructura MOP vigente" : "afectaciones de infraestructura MOP vigentes"}; ${criticalCount} de nivel crítico. La más cercana está ${nearest}.`;
   }
+  if (alertKey === "power:outage:current") {
+    const clients = finiteSum(members.map((member) => numericValue(member.impact.value)));
+    return `SAESA reporta ${members.length} ${members.length === 1 ? "corte eléctrico vigente" : "cortes eléctricos vigentes"}${clients === undefined ? "" : ` con ${Math.round(clients)} clientes afectados en total`}. El más cercano está ${nearest}.`;
+  }
+  if (alertKey === "power:outage:scheduled") {
+    return `SAESA informa ${members.length} ${members.length === 1 ? "corte programado próximo" : "cortes programados próximos"}. El más cercano está ${nearest}.`;
+  }
   if (alertKey.startsWith("wildfire-risk:")) {
     const maximum = finiteMax(members.map((member) => numericValue(member.impact.value)));
     return `Pronóstico CONAF cercano para ${alertKey.slice("wildfire-risk:".length)}: máxima probabilidad de ignición ${maximum === undefined ? "sobre el umbral de alerta" : `${Math.round(maximum)}%`}. El área representativa más cercana está ${nearest}.`;
@@ -530,6 +601,15 @@ function isCurrentObservation(row: ObservationRow, now: Date): boolean {
   const observedAge = ageHours(row.observed_at, nowMs);
 
   switch (row.signal_type) {
+    case "emergency.senapred.official_alert":
+      return seenAge <= 24 && observedAge <= 24;
+    case "energy.power.outage.current":
+      return seenAge <= 2;
+    case "energy.power.outage.scheduled": {
+      const validFrom = time(row.valid_from);
+      return seenAge <= 24 && validUntil !== undefined && validUntil >= nowMs &&
+        (validFrom === undefined || validFrom <= nowMs + 48 * 3_600_000);
+    }
     case "fire.wildfire.active":
       return seenAge <= 3;
     case "fire.ignition_probability.forecast": {
@@ -599,6 +679,11 @@ function makeDecision(
         emergency: stringValue(payload.emergency),
         icapLabel: stringValue(payload.icapLabel),
         sourceStatus: stringValue(payload.sourceStatus),
+        outageKind: stringValue(payload.outageKind),
+        currentStateConfidence: stringValue(payload.currentStateConfidence),
+        startAt: stringValue(payload.startAt),
+        endAt: stringValue(payload.endAt),
+        message: stringValue(payload.message),
       },
       profile: {
         homeRegion: profile.homeRegion,
@@ -741,6 +826,11 @@ function finiteMax(values: Array<number | undefined>): number | undefined {
   return finite.length > 0 ? Math.max(...finite) : undefined;
 }
 
+function finiteSum(values: Array<number | undefined>): number | undefined {
+  const finite = values.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  return finite.length > 0 ? finite.reduce((sum, value) => sum + value, 0) : undefined;
+}
+
 function object(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -762,4 +852,8 @@ function normalizeText(value: string | null | undefined): string | undefined {
 
 function slug(value: string): string {
   return normalizeText(value)?.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "general";
+}
+
+function truncate(value: string, max: number): string {
+  return value.length <= max ? value : `${value.slice(0, Math.max(0, max - 1)).trimEnd()}…`;
 }
