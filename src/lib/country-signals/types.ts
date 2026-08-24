@@ -8,7 +8,8 @@ export type SourceDomain =
   | "energy"
   | "emergency"
   | "seismic"
-  | "volcanic";
+  | "volcanic"
+  | "news";
 
 export type AuthMode = "none" | "api_key" | "token" | "user_token";
 
