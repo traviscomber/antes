@@ -34,7 +34,9 @@ describe("NeonCountrySignalStore", () => {
 
     expect(first).toEqual({ accepted: 1, duplicates: 0 });
     expect(second).toEqual({ accepted: 0, duplicates: 1 });
-    expect(db.calls[0]?.sql).toContain("on conflict do nothing");
+    const insertCall = db.calls.find((call) => call.sql.includes("insert into external_observations"));
+    expect(insertCall?.sql).toContain("on conflict (id) do nothing");
+    expect(db.calls.some((call) => call.sql.includes("set last_seen_at = greatest"))).toBe(true);
   });
 
   it("stores only one scalar representation per observation value", () => {
@@ -51,9 +53,9 @@ describe("NeonCountrySignalStore", () => {
 
     await store.upsertObservations([observation]);
 
-    const call = db.calls[0];
-    expect(call?.sql).not.toContain("token=REDACTED");
-    expect(call?.params).toContain("https://official.example/data?token=REDACTED");
+    const insertCall = db.calls.find((call) => call.sql.includes("insert into external_observations"));
+    expect(insertCall?.sql).not.toContain("token=REDACTED");
+    expect(insertCall?.params).toContain("https://official.example/data?token=REDACTED");
   });
 });
 
