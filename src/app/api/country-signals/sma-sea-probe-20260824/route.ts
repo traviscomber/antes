@@ -6,6 +6,7 @@ export const maxDuration = 60;
 
 const USER_AGENT = "N3uralia-ANTEMANO/0.1 (+https://www.antemano.app)";
 const SNIFA_RESULT = "https://snifa.sma.gob.cl/Sancionatorio/Resultado";
+const SNIFA_GRID = "https://snifa.sma.gob.cl/Sancionatorio/ObtenerResultadosGrid";
 const SEA_SEARCH = "https://seia.sea.gob.cl/busqueda/buscarProyectoResumen.php";
 
 export async function GET() {
@@ -18,24 +19,52 @@ export async function GET() {
 }
 
 async function inspectSnifa() {
-  const response = await fetch(SNIFA_RESULT, {
+  const pageResponse = await fetch(SNIFA_RESULT, {
     headers: { Accept: "text/html,*/*", "User-Agent": USER_AGENT },
     cache: "no-store",
     redirect: "follow",
     signal: AbortSignal.timeout(20_000),
   });
-  const html = await response.text();
-  const inline = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
-    .map((match) => match[1])
-    .join("\n");
+  const html = await pageResponse.text();
+  const body = new URLSearchParams({
+    draw: "1",
+    start: "0",
+    length: "50",
+    nombre: "",
+    expediente: "2026",
+    categoria: "0",
+    ddlRegion: "",
+    ddlComuna: "",
+    "search[value]": "",
+    "search[regex]": "false",
+  });
+  const gridResponse = await fetch(SNIFA_GRID, {
+    method: "POST",
+    headers: {
+      Accept: "application/json,text/javascript,*/*;q=0.01",
+      "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "User-Agent": USER_AGENT,
+      Origin: "https://snifa.sma.gob.cl",
+      Referer: SNIFA_RESULT,
+      "X-Requested-With": "XMLHttpRequest",
+    },
+    body,
+    cache: "no-store",
+    signal: AbortSignal.timeout(25_000),
+  });
+  const gridText = await gridResponse.text();
+  let gridPayload: unknown;
+  try {
+    gridPayload = JSON.parse(gridText) as unknown;
+  } catch {
+    gridPayload = { raw: gridText.slice(0, 5_000) };
+  }
   return {
-    status: response.status,
-    htmlBytes: html.length,
-    gridSnippets: snippets(inline, "ObtenerResultadosGrid", 5_000),
-    searchSnippets: [
-      ...snippets(inline, "function buscar", 4_000),
-      ...snippets(inline, "tableSancion", 4_000),
-    ].slice(0, 10),
+    pageStatus: pageResponse.status,
+    gridStatus: gridResponse.status,
+    gridContentType: gridResponse.headers.get("content-type"),
+    query: { expediente: "2026", start: 0, length: 50 },
+    grid: summarizeJson(gridPayload),
   };
 }
 
@@ -67,47 +96,69 @@ async function inspectSea(now: Date) {
     signal: AbortSignal.timeout(30_000),
   });
   const html = await response.text();
-  const tables = [...html.matchAll(/<table\b([^>]*)>([\s\S]*?)<\/table>/gi)]
-    .map((match, index) => parseTable(index, match[1], match[2]))
-    .filter((table) => table.rows.length > 0);
-  const projectLinks = [...html.matchAll(/href=["']([^"']*(?:ficha|expediente|proyecto)[^"']*)["']/gi)]
-    .map((match) => new URL(match[1], response.url || SEA_SEARCH).toString());
+  const inline = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
+    .map((match) => match[1])
+    .join("\n");
+  const endpointCandidates = [...inline.matchAll(/["'`]([^"'`]*(?:buscarProyecto|proyecto)[^"'`]*(?:\.php|Action)[^"'`]*)["'`]/gi)]
+    .map((match) => match[1]);
 
   return {
     status: response.status,
     finalUrl: response.url,
     htmlBytes: html.length,
+    setCookiePresent: Boolean(response.headers.get("set-cookie")),
     query: {
       PresentacionMin: formatSeaDate(start),
       PresentacionMax: formatSeaDate(end),
       tipoPresentacion: "Ambos",
     },
-    title: decodeHtml(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? ""),
-    tables: tables.slice(0, 8),
-    projectLinks: [...new Set(projectLinks)].slice(0, 30),
-    errorText: extractError(html),
+    endpointCandidates: [...new Set(endpointCandidates)].slice(0, 40),
+    dataTableSnippets: [
+      ...snippets(inline, "DataTable", 6_000),
+      ...snippets(inline, "dataTable", 6_000),
+      ...snippets(inline, "ajax", 6_000),
+      ...snippets(inline, "buscarProyectoAction", 6_000),
+      ...snippets(inline, "buscarProyectoActionExcel", 6_000),
+    ].slice(0, 16),
+    inlineBytes: inline.length,
   };
 }
 
-function parseTable(index: number, attrs: string, body: string) {
-  const id = attrs.match(/\bid=["']([^"']+)["']/i)?.[1] ?? null;
-  const rows = [...body.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map((rowMatch) => {
-    const cells = [...rowMatch[1].matchAll(/<t[hd]\b[^>]*>([\s\S]*?)<\/t[hd]>/gi)]
-      .map((cell) => cleanCell(cell[1]));
-    const links = [...rowMatch[1].matchAll(/href=["']([^"']+)["']/gi)]
-      .map((link) => new URL(link[1], SEA_SEARCH).toString());
-    return { cells, links };
-  }).filter((row) => row.cells.length > 0);
-  return { index, id, rowCount: rows.length, rows: rows.slice(0, 12) };
+function summarizeJson(value: unknown) {
+  if (!isObject(value)) return { type: Array.isArray(value) ? "array" : typeof value, sample: compact(value) };
+  const arrays = findArrays(value);
+  return {
+    keys: Object.keys(value),
+    draw: numeric(value.draw),
+    recordsTotal: numeric(value.recordsTotal),
+    recordsFiltered: numeric(value.recordsFiltered),
+    arrays: arrays.slice(0, 10).map(({ path, value: rows }) => ({
+      path,
+      count: rows.length,
+      sample: rows.slice(0, 5).map((row) => compact(row)),
+    })),
+    compact: compact(value),
+  };
 }
 
-function cleanCell(html: string): string {
-  return decodeHtml(
-    html
-      .replace(/<br\s*\/?\s*>/gi, " | ")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/\s+/g, " "),
-  ).trim();
+function findArrays(value: unknown, path = "root", depth = 0): { path: string; value: unknown[] }[] {
+  if (depth > 4) return [];
+  if (Array.isArray(value)) return [{ path, value }];
+  if (!isObject(value)) return [];
+  return Object.entries(value).flatMap(([key, child]) =>
+    findArrays(child, path === "root" ? key : `${path}.${key}`, depth + 1),
+  );
+}
+
+function compact(value: unknown, depth = 0): unknown {
+  if (depth > 4) return Array.isArray(value) ? `[${value.length} items]` : "[object]";
+  if (Array.isArray(value)) return value.slice(0, 5).map((item) => compact(item, depth + 1));
+  if (!isObject(value)) return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .slice(0, 50)
+      .map(([key, child]) => [key, compact(child, depth + 1)]),
+  );
 }
 
 function snippets(text: string, needle: string, width: number): string[] {
@@ -122,10 +173,10 @@ function snippets(text: string, needle: string, width: number): string[] {
   return [...new Set(output)];
 }
 
-function extractError(html: string): string | null {
-  const text = cleanCell(html);
-  const match = text.match(/(?:error|no se encontraron|sin resultados)[^.!]{0,300}/i);
-  return match?.[0] ?? null;
+function numeric(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && /^-?\d+(?:\.\d+)?$/.test(value.trim())) return Number(value);
+  return undefined;
 }
 
 function chileDateParts(date: Date): { year: string; month: string; day: string } {
@@ -144,15 +195,6 @@ function formatSeaDate(parts: { year: string; month: string; day: string }): str
   return `${parts.day}/${parts.month}/${parts.year}`;
 }
 
-function decodeHtml(value: string): string {
-  const named: Record<string, string> = {
-    nbsp: " ", amp: "&", quot: '"', apos: "'", lt: "<", gt: ">",
-    aacute: "á", eacute: "é", iacute: "í", oacute: "ó", uacute: "ú",
-    ntilde: "ñ", Aacute: "Á", Eacute: "É", Iacute: "Í", Oacute: "Ó",
-    Uacute: "Ú", Ntilde: "Ñ",
-  };
-  return value
-    .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => String.fromCodePoint(Number.parseInt(hex, 16)))
-    .replace(/&#(\d+);/g, (_, decimal: string) => String.fromCodePoint(Number.parseInt(decimal, 10)))
-    .replace(/&([A-Za-z]+);/g, (match, name: string) => named[name] ?? match);
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
