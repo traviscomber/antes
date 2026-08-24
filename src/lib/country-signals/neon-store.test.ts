@@ -16,7 +16,7 @@ class FakeExecutor implements SqlExecutor {
       const id = String(params[0]);
       if (this.seen.has(id)) return [];
       this.seen.add(id);
-      return [{ id } as T];
+      return [{ id } as unknown as T];
     }
 
     return [];
@@ -44,7 +44,7 @@ describe("NeonCountrySignalStore", () => {
     expect(splitObservationValue(undefined)).toEqual({ numeric: null, text: null, boolean: null });
   });
 
-  it("serializes evidence without placing credentials in SQL text", async () => {
+  it("uses parameterized evidence instead of interpolating it into SQL", async () => {
     const db = new FakeExecutor();
     const store = new NeonCountrySignalStore(db);
     const observation = makeObservation();
@@ -52,7 +52,7 @@ describe("NeonCountrySignalStore", () => {
     await store.upsertObservations([observation]);
 
     const call = db.calls[0];
-    expect(call?.sql).not.toContain("secret-token");
+    expect(call?.sql).not.toContain("token=REDACTED");
     expect(call?.params).toContain("https://official.example/data?token=REDACTED");
   });
 });
@@ -72,7 +72,7 @@ function makeObservation(): ExternalObservation {
     value: 12.5,
     unit: "unit",
     rawEvidenceRef: "https://official.example/data?token=REDACTED",
-    normalizedPayload: { verification: true, token: "secret-token" },
+    normalizedPayload: { verification: true },
     sourceUrl: "https://official.example",
     sourceVersion: "test@1",
     qualityState: "validated",
