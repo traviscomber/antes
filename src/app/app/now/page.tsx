@@ -30,6 +30,8 @@ export default async function NowPage() {
   const session = await requireSession();
   const snapshot = await getNowSnapshot(session.organizationId, session.userId);
   const location = snapshot.profile?.homeCommune ?? snapshot.profile?.homeRegion;
+  const regionalContext = snapshot.personalSignals.filter((signal) => signal.signalType === "news.regional.context");
+  const personalSignals = snapshot.personalSignals.filter((signal) => signal.signalType !== "news.regional.context");
 
   return (
     <main className="shell">
@@ -65,7 +67,7 @@ export default async function NowPage() {
           </div>
           <div>
             <strong>{snapshot.sourcesWithEvidence}</strong>
-            <span>fuentes oficiales</span>
+            <span>fuentes con evidencia</span>
           </div>
         </div>
       </section>
@@ -102,7 +104,7 @@ export default async function NowPage() {
 
               <p className="sourceMessage">
                 {alert.criticalCount > 0 ? `${alert.criticalCount} crítico${alert.criticalCount === 1 ? "" : "s"} · ` : ""}
-                {alert.sourceId} · evidencia oficial persistida
+                {alert.sourceId} · evidencia persistida
               </p>
             </article>
           )) : (
@@ -127,13 +129,13 @@ export default async function NowPage() {
         <div className="sectionHeading">
           <div>
             <p className="sectionLabel">SEÑALES RELEVANTES</p>
-            <h3>{location ? `Contexto para ${location}` : "Configura tu ubicación"}</h3>
+            <h3>{location ? `Lo que puede afectarte en ${location}` : "Configura tu ubicación"}</h3>
           </div>
           <p>Coincidencia por comuna, cercanía o región. Una señal relevante no es necesariamente una alerta.</p>
         </div>
 
         <div className="sourceGrid">
-          {snapshot.personalSignals.length > 0 ? snapshot.personalSignals.map((signal) => (
+          {personalSignals.length > 0 ? personalSignals.map((signal) => (
             <article className="sourceCard personalSignalCard" key={`personal-${signal.id}`}>
               <div className="sourceCardTop">
                 <div>
@@ -144,7 +146,7 @@ export default async function NowPage() {
               </div>
 
               <p className="sourceDescription">
-                {signal.value ?? "Observación oficial sin valor escalar"}
+                {signal.value ?? "Observación sin valor escalar"}
                 {signal.estimatedTankCostClp !== undefined
                   ? ` · Llenar ${snapshot.profile?.tankCapacityLiters} L: ${currencyFormat.format(signal.estimatedTankCostClp)}`
                   : ""}
@@ -163,13 +165,13 @@ export default async function NowPage() {
               <div className="sourceCardTop">
                 <div>
                   <p className="sourceAuthority">PERFIL PERSONAL</p>
-                  <h4>{location ? "Sin señales coincidentes" : "Falta tu ubicación"}</h4>
+                  <h4>{location ? "Sin señales operativas coincidentes" : "Falta tu ubicación"}</h4>
                 </div>
                 <span className="statusBadge neutral">PERFIL</span>
               </div>
               <p className="sourceDescription">
                 {location
-                  ? "No hay observaciones persistidas que coincidan actualmente con tu comuna, región o un radio de 80 km."
+                  ? "No hay señales operativas persistidas que coincidan actualmente con tu comuna, región o un radio de 80 km."
                   : "Configura región y comuna para filtrar la Capa País."}
               </p>
               <p className="sourceMessage"><Link href="/app/profile">Editar perfil</Link></p>
@@ -177,6 +179,39 @@ export default async function NowPage() {
           )}
         </div>
       </section>
+
+      {regionalContext.length > 0 ? (
+        <section className="sectionBlock">
+          <div className="sectionHeading">
+            <div>
+              <p className="sectionLabel">CONTEXTO REGIONAL</p>
+              <h3>Qué está pasando en Los Ríos</h3>
+            </div>
+            <p>Noticias regionales sirven como sensor temprano. No generan una alerta por sí solas: requieren corroboración con una fuente oficial u operacional.</p>
+          </div>
+
+          <div className="sourceGrid">
+            {regionalContext.map((signal) => (
+              <article className="sourceCard personalSignalCard" key={`context-${signal.id}`}>
+                <div className="sourceCardTop">
+                  <div>
+                    <p className="sourceAuthority">{signal.sourceName}</p>
+                    <h4>Contexto regional</h4>
+                  </div>
+                  <span className="statusBadge neutral">CONTEXTO</span>
+                </div>
+                <p className="sourceDescription">{signal.value ?? "Noticia regional"}</p>
+                <dl className="sourceMeta">
+                  <div><dt>Publicado</dt><dd>{formatChileDate(signal.observedAt)}</dd></div>
+                  <div><dt>Ubicación</dt><dd>{signalLocation(signal)}</dd></div>
+                  <div><dt>Uso</dt><dd>No genera alerta</dd></div>
+                </dl>
+                <p className="sourceMessage">Medio regional · requiere corroboración para elevarse a alerta</p>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="decisionPanel compactDecision">
         <div>
@@ -209,7 +244,7 @@ export default async function NowPage() {
                 </span>
               </div>
 
-              <p className="sourceDescription">{signal.value ?? "Observación oficial sin valor escalar"}</p>
+              <p className="sourceDescription">{signal.value ?? "Observación sin valor escalar"}</p>
 
               <dl className="sourceMeta">
                 <div><dt>Actualizado</dt><dd>{formatChileDate(signal.observedAt)}</dd></div>
@@ -335,7 +370,7 @@ function personalStatus(snapshot: NowSnapshot): string {
   if (!profile?.homeCommune && !profile?.homeRegion) {
     return "Agrega tu comuna y región para cruzar tu perfil con la Capa País real.";
   }
-  return `${snapshot.personalSignals.length} señales oficiales son relevantes para tu contexto. Sólo se elevan a alerta cuando cumplen una regla vigente de impacto personal.`;
+  return `${snapshot.personalSignals.length} señales son relevantes para tu contexto. Sólo las fuentes con evidencia suficiente y una regla vigente se elevan a alerta.`;
 }
 
 function profileSummary(snapshot: NowSnapshot): string {
@@ -382,8 +417,11 @@ function operationalDetail(snapshot: NowSnapshot): string {
 function personalAlertLabel(alert: PersonalAlert): string {
   if (alert.alertKey === "mop:vialidad") return "Emergencias viales";
   if (alert.alertKey === "mop:obras-hidraulicas") return "Infraestructura hídrica";
+  if (alert.alertKey === "power:outage:current") return "Corte eléctrico vigente";
+  if (alert.alertKey === "power:outage:scheduled") return "Corte eléctrico programado";
   if (alert.alertKey === "water:river-flow") return "Alerta fluviométrica";
   if (alert.alertKey === "air-quality") return "Calidad del aire";
+  if (alert.alertKey.startsWith("senapred:")) return "Alerta oficial SENAPRED";
   if (alert.alertKey.startsWith("wildfire-risk:")) return "Riesgo de incendio";
   if (alert.alertKey.startsWith("wildfire:")) return "Incendio activo";
   if (alert.alertKey.startsWith("earthquake:")) return "Sismo cercano";
@@ -429,6 +467,10 @@ function signalLabel(value: string): string {
     "fire.ignition_probability.forecast": "Probabilidad de ignición",
     "fire.fuel_moisture.forecast": "Humedad de combustible",
     "fire.wildfire.active": "Incendio activo",
+    "emergency.senapred.official_alert": "Alerta oficial SENAPRED",
+    "energy.power.outage.current": "Corte eléctrico vigente",
+    "energy.power.outage.scheduled": "Corte eléctrico programado",
+    "news.regional.context": "Contexto regional",
     "environment.air_quality.pm25": "Calidad del aire · MP2.5",
     "environment.air_quality.pm10": "Calidad del aire · MP10",
     "environment.air_quality.no2": "Calidad del aire · NO₂",
@@ -480,6 +522,7 @@ function personalReasonDetail(signal: PersonalSignal): string {
     const where = signal.distanceKm !== undefined ? `a ${signal.distanceKm.toFixed(1)} km` : "en tu zona";
     return `Menor precio vigente encontrado para este combustible ${where}`;
   }
+  if (signal.signalType === "news.regional.context") return "Contexto regional; no genera alerta sin corroboración";
   if (signal.relevance === "comuna") return "Coincide con tu comuna";
   if (signal.relevance === "cercania") return `A ${Math.round(signal.distanceKm ?? 0)} km de tu ubicación de referencia`;
   return "Coincide con tu región";
