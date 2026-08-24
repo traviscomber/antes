@@ -11,6 +11,7 @@ export const maxDuration = 60;
 
 const CRITICAL_SOURCE_IDS = [
   "cl.senapred.official-alerts",
+  "cl.dmc.official-alerts",
   "cl.saesa.power-outages",
   "cl.aguas-decima.water-interruptions",
   "cl.conaf.active-fires",
