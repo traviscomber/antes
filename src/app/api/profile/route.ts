@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
-import { refreshPersonalAlertsForUser } from "@/lib/profile/personal-alerts";
+import { refreshPersonalAlertsForAllUsersWithWater } from "@/lib/profile/personal-alerts-water-service";
 import {
   getUserProfile,
   saveUserProfile,
@@ -82,7 +82,11 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await refreshPersonalAlertsForUser(session.userId);
+    // Recalculate the complete surface, including service-company alerts such as
+    // Aguas Décima, immediately after a profile/location change. Profile updates
+    // are infrequent and the batch is capped, so this avoids a temporary gap until
+    // the next five-minute source cron without weakening existing alert rules.
+    await refreshPersonalAlertsForAllUsersWithWater();
   } catch (error) {
     // The profile is canonical user input and must remain saved even if a derived
     // alert refresh fails. The next successful source ingestion will retry it.
