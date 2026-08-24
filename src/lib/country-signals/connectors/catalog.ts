@@ -18,6 +18,7 @@ import {
   MopAllInfrastructureEmergenciesConnector,
 } from "./mop-live-overrides";
 import { ObservatorioLogisticoConnector } from "./observatorio-logistico";
+import { OdepaWholesaleProduceConnector } from "./odepa-wholesale";
 import { SincaAirQualityConnector } from "./sinca";
 
 export function createCountrySignalConnector(
@@ -62,6 +63,8 @@ export function createCountrySignalConnector(
       return createCenSipConnector("cl.cen.fuel-stock");
     case "cl.bcch.bde":
       return new BancoCentralConnector();
+    case "cl.odepa.wholesale-produce":
+      return new OdepaWholesaleProduceConnector();
     case "cl.cne.liquid-fuel-prices":
       return createCneFuelConnector("cl.cne.liquid-fuel-prices");
     case "cl.cne.liquid-fuel-sales":
