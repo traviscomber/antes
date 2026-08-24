@@ -87,7 +87,9 @@ a {
 .ingestButton,
 .profileField > span,
 .profileInputWithUnit > span,
-.profileMessage {
+.profileMessage,
+.profileLocationLabel,
+.profileSecondaryButton {
   text-transform: uppercase;
   letter-spacing: 0.12em;
   font-size: 11px;
@@ -100,7 +102,8 @@ a {
 .footer,
 .sourceMeta dt,
 .profileField > span,
-.profileInputWithUnit > span {
+.profileInputWithUnit > span,
+.profileLocationLabel {
   color: var(--muted);
 }
 
@@ -296,6 +299,11 @@ a {
   outline: none;
 }
 
+.ingestButton:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
 .statusBadge {
   display: inline-flex;
   align-items: center;
@@ -375,6 +383,49 @@ a {
   padding: 0 14px;
 }
 
+.profileLocationCapture {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 82px;
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.profileLocationCapture > div:first-of-type {
+  display: grid;
+  gap: 8px;
+  max-width: 700px;
+}
+
+.profileLocationActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.profileSecondaryButton {
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 10px 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.profileSecondaryButton:hover,
+.profileSecondaryButton:focus-visible {
+  border-color: var(--muted);
+  color: var(--text);
+  outline: none;
+}
+
 .profileActions {
   display: flex;
   align-items: center;
@@ -430,7 +481,8 @@ a {
   .sectionHeading,
   .decisionPanel,
   .footer,
-  .profileActions {
+  .profileActions,
+  .profileLocationCapture {
     align-items: flex-start;
     flex-direction: column;
   }
@@ -445,6 +497,10 @@ a {
 
   .sourceCard {
     border-right: 0;
+  }
+
+  .profileLocationActions {
+    justify-content: flex-start;
   }
 }
 
@@ -473,5 +529,10 @@ a {
 
   .profileForm {
     padding: 20px;
+  }
+
+  .profileLocationActions,
+  .profileLocationActions button {
+    width: 100%;
   }
 }
