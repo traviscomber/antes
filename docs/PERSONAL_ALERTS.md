@@ -23,10 +23,14 @@ No se crean nodos empresariales ficticios para representar domicilio, auto o pre
 - país;
 - región;
 - comuna;
-- coordenada de referencia cuando existe;
+- coordenada de referencia cuando el usuario la autoriza;
 - vehículo;
 - tipo de combustible;
 - capacidad de estanque.
+
+La página de perfil permite pedir la ubicación al navegador de forma explícita. La aplicación no solicita ni captura coordenadas silenciosamente. Región y comuna siguen siendo útiles sin ubicación precisa.
+
+Si el usuario cambia región o comuna sin confirmar una nueva coordenada, ANTEMANO elimina la coordenada anterior para impedir que una ubicación vieja produzca distancias falsas. El usuario también puede quitar la ubicación precisa y conservar sólo comuna/región.
 
 El precio o costo de combustible sólo se calcula cuando existe una observación CNE real compatible con el combustible configurado.
 
@@ -92,6 +96,8 @@ El motor evaluó 80 observaciones geográficamente relevantes, encontró 18 coin
 
 Los 18 registros de la regla anterior fueron resueltos al migrar al modelo consolidado.
 
+El perfil ya soporta ubicación precisa confirmada por el navegador para cualquier usuario. Juan conserva su coordenada de referencia actual hasta que la reemplace, la quite o cambie de comuna/región sin confirmar una nueva.
+
 ## Gates pendientes
 
 ### Automatización periódica
@@ -101,7 +107,3 @@ Producción no tiene `CRON_SECRET` configurado al 2026-08-24. No se habilita un 
 ### Combustible
 
 Producción no tiene `CNE_API_TOKEN` configurado al 2026-08-24. El modelo y el cálculo de costo por estanque ya están preparados, pero no se muestran precios ficticios.
-
-### Ubicación para usuarios nuevos
-
-Juan tiene coordenada de referencia persistida. Para escalar a usuarios nuevos falta resolver geocodificación/selección de ubicación de forma verificable para convertir dirección/comuna en coordenadas cuando sea necesario.
