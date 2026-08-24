@@ -52,6 +52,7 @@ export default async function ProfilePage({
         <div className="topbarMeta">
           <span>{session.email}</span>
           <Link href="/app/now">AHORA</Link>
+          <Link href="/app/fuel">COMBUSTIBLE</Link>
           <Link href="/app/sources">FUENTES</Link>
         </div>
       </header>
@@ -133,6 +134,15 @@ export default async function ProfilePage({
             <button className="ingestButton" type="submit">GUARDAR PERFIL</button>
           </div>
         </form>
+      </section>
+
+      <section className="decisionPanel compactDecision">
+        <div>
+          <p className="sectionLabel">MERCADO PERSONAL</p>
+          <h3>El precio útil es el que realmente puedes usar.</h3>
+          <p>ANTEMANO compara estaciones vigentes de tu comuna o cercanas, conserva sólo tu combustible cuando lo defines y calcula el costo de estanque sin modificar la evidencia original.</p>
+        </div>
+        <span className="statusBadge healthy"><Link href="/app/fuel">VER COMBUSTIBLE</Link></span>
       </section>
 
       <section className="decisionPanel compactDecision">
