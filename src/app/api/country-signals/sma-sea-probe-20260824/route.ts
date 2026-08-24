@@ -100,12 +100,12 @@ async function fetchSeaRecent(now: Date) {
     cache: "no-store",
     signal: AbortSignal.timeout(30_000),
   });
-  const text = await response.text();
+  const responseText = await response.text();
   let payload: unknown;
   try {
-    payload = JSON.parse(text) as unknown;
+    payload = JSON.parse(responseText) as unknown;
   } catch {
-    return { status: response.status, contentType: response.headers.get("content-type"), raw: text.slice(0, 5_000), query: params };
+    return { status: response.status, contentType: response.headers.get("content-type"), raw: responseText.slice(0, 5_000), query: params };
   }
   if (!isObject(payload)) return { status: response.status, query: params, payload };
   const rows = Array.isArray(payload.data) ? payload.data.filter(isObject) : [];
