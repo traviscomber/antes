@@ -6,6 +6,7 @@ import {
   probeConafRedButtonStoryMapHealth,
 } from "./connectors/conaf-active-fires";
 import { probeConafForecastHealth } from "./connectors/conaf";
+import { DgaVipNetReservoirConnector } from "./connectors/dga-vipnet";
 import { DmcWrfConnector } from "./connectors/dmc";
 import { LeyChileConnector } from "./connectors/leychile";
 import {
@@ -28,6 +29,7 @@ export async function getChileSignalHealth(): Promise<SourceHealth[]> {
     new ObservatorioLogisticoConnector(),
     new LeyChileConnector(),
     new DgaDirectAlertsConnector(),
+    new DgaVipNetReservoirConnector(),
     new VialidadEmergenciesConnector(),
     new BorderCrossingsConnector(),
     new MopAllInfrastructureEmergenciesConnector(),
