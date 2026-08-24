@@ -83,10 +83,9 @@ export async function getShoACoastalRiskContext(profile: {
   if (!isValdiviaPilot) return undefined;
 
   const evaluatedAt = new Date().toISOString();
-  const latitude = profile.homeLatitude;
-  const longitude = profile.homeLongitude;
+  const point = coordinatePoint(profile.homeLatitude, profile.homeLongitude);
 
-  if (!isCoordinate(latitude, longitude)) {
+  if (!point) {
     return baseContext(NIEBLA_CHART, evaluatedAt, {
       state: "location_required",
       qualityState: "validated",
@@ -94,7 +93,7 @@ export async function getShoACoastalRiskContext(profile: {
     });
   }
 
-  const chart = CHARTS.find((candidate) => pointInsideBounds({ latitude, longitude }, candidate.coverageBounds));
+  const chart = CHARTS.find((candidate) => pointInsideBounds(point, candidate.coverageBounds));
   if (!chart) {
     return baseContext(NIEBLA_CHART, evaluatedAt, {
       state: "not_covered",
@@ -105,7 +104,6 @@ export async function getShoACoastalRiskContext(profile: {
 
   try {
     const zones = await loadDepthZones(chart);
-    const point = { latitude, longitude };
     const matches = zones
       .filter((zone) => zone.polygons.some((polygon) => pointInPolygonWithHoles(point, polygon)))
       .sort((left, right) => right.band.minMeters - left.band.minMeters);
@@ -305,9 +303,10 @@ function baseContext(
   };
 }
 
-function isCoordinate(latitude: number | undefined, longitude: number | undefined): latitude is number {
-  return latitude !== undefined && longitude !== undefined && Number.isFinite(latitude) && Number.isFinite(longitude) &&
-    latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180;
+function coordinatePoint(latitude: number | undefined, longitude: number | undefined): Point | undefined {
+  if (latitude === undefined || longitude === undefined || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return undefined;
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return undefined;
+  return { latitude, longitude };
 }
 
 function normalizePlace(value: string | undefined): string {
