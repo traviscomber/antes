@@ -223,12 +223,13 @@ export class CenSipConnector implements CountrySignalConnector {
 
   private normalizeRow(row: JsonObject, fetchedAt: string): ExternalObservation {
     const entity = readText(row, this.definition.entityAliases);
+    const rawSourceTimestamp = readText(row, this.definition.timestampAliases);
     const sourceTimestamp = readDate(row, this.definition.timestampAliases);
     const observedAt = sourceTimestamp ?? fetchedAt;
     const value = readScalar(row, this.definition.valueAliases);
     const sourceRecordId =
       readText(row, ["id", "id_info", "idInfo", "codigo", "code"]) ??
-      [entity, sourceTimestamp, shortHash(row)].filter(Boolean).join(":");
+      [entity, rawSourceTimestamp, shortHash(row)].filter(Boolean).join(":");
 
     return {
       id: stableObservationId([
@@ -252,9 +253,14 @@ export class CenSipConnector implements CountrySignalConnector {
       rawEvidenceRef: this.source.canonicalUrl,
       normalizedPayload: {
         entity,
+        rawSourceTimestamp,
         sourceTimestamp,
         row,
         contractState: "provisional_until_first_authenticated_production_validation",
+        timestampPolicy:
+          sourceTimestamp === undefined && rawSourceTimestamp
+            ? "Naive/local source timestamp preserved without inventing a Chile UTC offset; observedAt uses ingestion time until authenticated contract validation."
+            : undefined,
       },
       sourceUrl: this.source.canonicalUrl,
       sourceVersion: this.parserVersion,
@@ -338,10 +344,10 @@ function readDate(row: JsonObject, aliases: string[]): string | undefined {
   }
   if (typeof value !== "string" || !value.trim()) return undefined;
   const clean = value.trim();
-  const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})?$/.test(clean)
-    ? `${clean.replace(" ", "T")}-04:00`
-    : clean;
-  const date = new Date(normalized);
+  if (/^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)?$/.test(clean)) {
+    return undefined;
+  }
+  const date = new Date(clean);
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
