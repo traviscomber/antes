@@ -11,7 +11,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 export default async function ActivatePage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; token?: string }>;
 }) {
   try {
     const session = await getSession();
@@ -22,6 +22,7 @@ export default async function ActivatePage({
 
   const params = await searchParams;
   const message = params.error ? ERROR_MESSAGES[params.error] : undefined;
+  const token = typeof params.token === "string" ? params.token.slice(0, 512) : "";
 
   return (
     <main className={styles.shell}>
@@ -37,7 +38,14 @@ export default async function ActivatePage({
         <form className={styles.form} action="/api/auth/activate" method="post">
           <label>
             <span>Código de activación</span>
-            <input name="token" type="text" autoComplete="one-time-code" required maxLength={512} />
+            <input
+              name="token"
+              type="text"
+              autoComplete="one-time-code"
+              required
+              maxLength={512}
+              defaultValue={token}
+            />
           </label>
 
           <label>
