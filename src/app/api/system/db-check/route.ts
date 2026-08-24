@@ -27,14 +27,31 @@ export async function GET() {
   try {
     const sql = neon(databaseUrl);
     const rows = await sql.query(
-      `select to_regclass('public.app_users') is not null as auth_schema_ready`,
+      `select
+         current_database() as database_name,
+         to_regclass('public.app_users') is not null as auth_schema_ready,
+         (
+           select count(*)::int
+             from pg_class c
+             join pg_namespace n on n.oid = c.relnamespace
+            where n.nspname = 'public'
+              and c.relkind = 'r'
+         ) as public_table_count`,
     );
-    const row = rows[0] as { auth_schema_ready?: boolean } | undefined;
+    const row = rows[0] as
+      | {
+          database_name?: string;
+          auth_schema_ready?: boolean;
+          public_table_count?: number;
+        }
+      | undefined;
 
     return NextResponse.json({
       configured: true,
       source,
       reachable: true,
+      databaseName: row?.database_name ?? null,
+      publicTableCount: Number(row?.public_table_count ?? 0),
       authSchemaReady: Boolean(row?.auth_schema_ready),
     });
   } catch (error) {
