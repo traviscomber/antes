@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { refreshPersonalAlertsForUser } from "@/lib/profile/personal-alerts";
-import { saveUserProfile, type FuelType } from "@/lib/profile/user-profile";
+import {
+  getUserProfile,
+  saveUserProfile,
+  type FuelType,
+} from "@/lib/profile/user-profile";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const ALLOWED_FUELS = new Set<FuelType>(["gasoline_93", "gasoline_95", "gasoline_97", "diesel"]);
+const LOCATION_ACTIONS = new Set(["keep", "replace", "clear"]);
 
 export async function POST(request: NextRequest) {
   if (!sameOrigin(request)) {
@@ -27,15 +32,47 @@ export async function POST(request: NextRequest) {
     ? fuelText as FuelType
     : undefined;
   const tankCapacityLiters = numericField(form, "tankCapacityLiters");
+  const locationActionText = field(form, "homeLocationAction", 20) ?? "keep";
+  const locationAction = LOCATION_ACTIONS.has(locationActionText) ? locationActionText : "keep";
+  const submittedLatitude = numericField(form, "homeLatitude");
+  const submittedLongitude = numericField(form, "homeLongitude");
 
   if (tankCapacityLiters !== undefined && (tankCapacityLiters < 1 || tankCapacityLiters > 500)) {
     return redirectProfile(request, "invalid");
   }
 
+  if (
+    locationAction === "replace" &&
+    !validCoordinatePair(submittedLatitude, submittedLongitude)
+  ) {
+    return redirectProfile(request, "invalid_location");
+  }
+
   try {
+    const existing = await getUserProfile(session.userId);
+    let homeLatitude: number | undefined;
+    let homeLongitude: number | undefined;
+
+    if (locationAction === "replace") {
+      homeLatitude = submittedLatitude;
+      homeLongitude = submittedLongitude;
+    } else if (
+      locationAction === "keep" &&
+      samePlace(existing?.homeRegion, homeRegion) &&
+      samePlace(existing?.homeCommune, homeCommune)
+    ) {
+      homeLatitude = existing?.homeLatitude;
+      homeLongitude = existing?.homeLongitude;
+    }
+
+    // If the place text changed without a newly confirmed browser location, the
+    // previous coordinates are intentionally cleared rather than reused for a
+    // different commune/region.
     await saveUserProfile(session.userId, {
       homeRegion,
       homeCommune,
+      homeLatitude,
+      homeLongitude,
       vehicleName,
       fuelType,
       tankCapacityLiters,
@@ -66,6 +103,28 @@ function numericField(form: FormData, name: string): number | undefined {
   if (!raw) return undefined;
   const value = Number(raw);
   return Number.isFinite(value) ? value : undefined;
+}
+
+function validCoordinatePair(
+  latitude: number | undefined,
+  longitude: number | undefined,
+): boolean {
+  return latitude !== undefined && longitude !== undefined &&
+    latitude >= -90 && latitude <= 90 &&
+    longitude >= -180 && longitude <= 180;
+}
+
+function samePlace(left: string | undefined, right: string | undefined): boolean {
+  return normalizePlace(left) === normalizePlace(right);
+}
+
+function normalizePlace(value: string | undefined): string {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
 }
 
 function redirectProfile(request: NextRequest, state: string) {
