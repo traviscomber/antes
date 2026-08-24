@@ -2,6 +2,7 @@ import { requireCountrySignalSource } from "../registry";
 import type { SourceHealth } from "../types";
 import { discoverArcGisPortalReferences } from "./arcgis-portal";
 
+export const CONAF_ARCGIS_PORTAL_URL = "https://geprif.maps.arcgis.com";
 export const CONAF_FORECAST_ITEM_ID = "06a31e138f5c40efbd577c1993154ce5";
 export const CONAF_RED_BUTTON_ITEM_ID = "41ee3c691359437aa9df2a09d7f6124e";
 
@@ -35,15 +36,15 @@ export async function probeConafActiveFireHealth(): Promise<SourceHealth> {
     }
 
     const html = await response.text();
-    const hasPowerBi = /app\.powerbi\.com\/view/i.test(html);
+    const hasEmbeddedReport = /<(?:iframe|script)\b/i.test(html);
     return {
       sourceId: source.id,
       state: "planned",
       checkedAt,
       latencyMs: Date.now() - startedAt,
-      message: hasPowerBi
-        ? "Official CONAF/Minagri active-fire report is reachable, but the published channel is an embedded Power BI report. No stable machine-readable CONAF contract has been validated, so ingestion remains disabled."
-        : "Official CONAF/Minagri report is reachable, but no stable machine-readable active-fire contract has been validated. Ingestion remains disabled.",
+      message: hasEmbeddedReport
+        ? "Official CONAF active-fire page is reachable and contains embedded live reporting, but no stable machine-readable CONAF/SIDCO contract has been validated. Ingestion remains disabled."
+        : "Official CONAF active-fire page is reachable, but no stable machine-readable active-fire contract has been validated. Ingestion remains disabled.",
     };
   } catch (error) {
     return {
@@ -65,8 +66,14 @@ async function probeArcGisDashboard(
   const startedAt = Date.now();
 
   try {
-    const references = await discoverArcGisPortalReferences(itemId, 3);
-    const root = references.items.find((item) => item.id.toLowerCase() === itemId);
+    const references = await discoverArcGisPortalReferences(
+      itemId,
+      3,
+      CONAF_ARCGIS_PORTAL_URL,
+    );
+    const root = references.items.find(
+      (item) => item.id.toLowerCase() === itemId.toLowerCase(),
+    );
     const titles = references.items
       .map((item) => item.title)
       .filter((title): title is string => Boolean(title))
