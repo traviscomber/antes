@@ -7,6 +7,7 @@ import type {
 } from "../types";
 import {
   arcGisEvidenceUrl,
+  arcGisNumber,
   arcGisText,
   fetchArcGisFeatureCount,
   fetchArcGisFeatures,
@@ -26,7 +27,7 @@ const DGA_STATIONS_LAYER =
 
 export class DgaDirectAlertsConnector implements CountrySignalConnector {
   readonly source = DGA_SOURCE;
-  readonly parserVersion = "dga-alertas-arcgis@3";
+  readonly parserVersion = "dga-alertas-arcgis@4";
 
   async healthCheck(): Promise<SourceHealth> {
     const checkedAt = new Date().toISOString();
@@ -38,7 +39,7 @@ export class DgaDirectAlertsConnector implements CountrySignalConnector {
         state: count > 0 ? "healthy" : "degraded",
         checkedAt,
         latencyMs: Date.now() - startedAt,
-        message: `${count} current DGA hydrometric readings available.`,
+        message: `${count} DGA alert-view rows available; ingestion retains only active alert readings.`,
       };
     } catch (error) {
       return failureHealth(this.source.id, checkedAt, startedAt, error);
@@ -60,9 +61,14 @@ export class DgaDirectAlertsConnector implements CountrySignalConnector {
     }
 
     let joinedWithStation = 0;
+    let activeAlertRows = 0;
     const observations: ExternalObservation[] = [];
 
     for (const reading of readings) {
+      const alertIndicator = arcGisNumber(reading.attributes, "mod_indale");
+      if (alertIndicator === undefined || alertIndicator <= 0) continue;
+      activeAlertRows += 1;
+
       const stationCode = arcGisText(reading.attributes, "mod_codest");
       const station = stationCode ? stationsByCode.get(stationCode) : undefined;
       if (station) joinedWithStation += 1;
@@ -91,16 +97,12 @@ export class DgaDirectAlertsConnector implements CountrySignalConnector {
       });
     }
 
-    if (observations.length === 0) {
-      throw new Error("DGA current-readings table returned no usable hydrometric observations.");
-    }
-
     return successBatch(
       this.source.id,
       fetchedAt,
       this.parserVersion,
       observations,
-      `${readings.length} DGA current readings normalized; ${joinedWithStation} matched to station metadata/geography.`,
+      `${activeAlertRows} active DGA alert rows found; ${observations.length} normalized and ${joinedWithStation} matched to station metadata/geography.`,
       startedAt,
     );
   }
