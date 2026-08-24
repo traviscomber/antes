@@ -1,5 +1,5 @@
 import type { CountrySignalConnector } from "../types";
-import { AguasDecimaWaterInterruptionConnector } from "./aguas-decima";
+import { AguasDecimaRuntimeConnector } from "./aguas-decima-runtime";
 import { BancoCentralConnector } from "./banco-central";
 import { BencinaEnLineaConnector } from "./bencina-en-linea";
 import { createCenSipConnector } from "./cen-sip";
@@ -65,7 +65,7 @@ export function createCountrySignalConnector(
     case "cl.saesa.power-outages":
       return new SaesaPowerOutageConnector();
     case "cl.aguas-decima.water-interruptions":
-      return new AguasDecimaWaterInterruptionConnector();
+      return new AguasDecimaRuntimeConnector();
     case "cl.rioenlinea.regional-news":
       return new RioenLineaRegionalNewsConnector();
     case "cl.cen.cmg-online":

@@ -1,4 +1,4 @@
-import { AguasDecimaWaterInterruptionConnector } from "./connectors/aguas-decima";
+import { AguasDecimaRuntimeConnector } from "./connectors/aguas-decima-runtime";
 import { BancoCentralConnector } from "./connectors/banco-central";
 import { BencinaEnLineaConnector } from "./connectors/bencina-en-linea";
 import { createCenSipConnector, cenSipSourceIds } from "./connectors/cen-sip";
@@ -55,7 +55,7 @@ export async function getChileSignalHealth(): Promise<SourceHealth[]> {
     new ConafActiveFiresConnector(),
     new SenapredOfficialAlertConnector(),
     new SaesaPowerOutageConnector(),
-    new AguasDecimaWaterInterruptionConnector(),
+    new AguasDecimaRuntimeConnector(),
     new RioenLineaRegionalNewsConnector(),
     ...cenSipSourceIds.map((sourceId) => createCenSipConnector(sourceId)),
     new BancoCentralConnector(),
