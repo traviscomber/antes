@@ -8,26 +8,28 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
+  const browserForm = isBrowserForm(request);
+
   if (!sameOrigin(request)) {
-    return NextResponse.json({ error: "invalid_origin" }, { status: 403 });
+    return respondError(request, browserForm, "invalid_origin", 403);
   }
 
   const session = await getSession();
   if (!session) {
-    return NextResponse.json({ error: "authentication_required" }, { status: 401 });
+    return respondError(request, browserForm, "authentication_required", 401);
   }
   if (!isAdmin(session)) {
-    return NextResponse.json({ error: "admin_required" }, { status: 403 });
+    return respondError(request, browserForm, "admin_required", 403);
   }
 
   const sourceId = await readSourceId(request);
   if (!sourceId) {
-    return NextResponse.json({ error: "source_id_required" }, { status: 400 });
+    return respondError(request, browserForm, "source_id_required", 400);
   }
 
   const connector = createCountrySignalConnector(sourceId);
   if (!connector) {
-    return NextResponse.json({ error: "source_not_ingestible" }, { status: 400 });
+    return respondError(request, browserForm, "source_not_ingestible", 400);
   }
 
   try {
@@ -35,11 +37,21 @@ export async function POST(request: NextRequest) {
       connector,
       createNeonCountrySignalStore(),
     );
+
+    if (browserForm) {
+      const url = new URL("/app/sources", request.url);
+      url.searchParams.set("source", result.sourceId);
+      url.searchParams.set("accepted", String(result.accepted));
+      url.searchParams.set("duplicates", String(result.duplicates));
+      url.searchParams.set("state", result.state);
+      return NextResponse.redirect(url, 303);
+    }
+
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {
     const message = sanitizePublicError(error);
     const status = /not configured|required/i.test(message) ? 409 : 502;
-    return NextResponse.json({ ok: false, error: message }, { status });
+    return respondError(request, browserForm, message, status);
   }
 }
 
@@ -55,6 +67,26 @@ async function readSourceId(request: NextRequest): Promise<string | undefined> {
   const form = await request.formData().catch(() => null);
   const value = form?.get("sourceId");
   return typeof value === "string" ? value.trim() : undefined;
+}
+
+function respondError(
+  request: NextRequest,
+  browserForm: boolean,
+  error: string,
+  status: number,
+): NextResponse {
+  if (browserForm) {
+    const url = new URL("/app/sources", request.url);
+    url.searchParams.set("ingestError", error.slice(0, 180));
+    return NextResponse.redirect(url, 303);
+  }
+  return NextResponse.json({ ok: false, error }, { status });
+}
+
+function isBrowserForm(request: NextRequest): boolean {
+  const contentType = request.headers.get("content-type") ?? "";
+  return contentType.includes("application/x-www-form-urlencoded") ||
+    contentType.includes("multipart/form-data");
 }
 
 function sanitizePublicError(error: unknown): string {
