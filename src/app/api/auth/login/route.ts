@@ -40,7 +40,12 @@ export async function POST(request: NextRequest) {
     await setSessionCookie(token);
 
     return NextResponse.redirect(new URL("/app/now", request.url), 303);
-  } catch {
+  } catch (error) {
+    console.error("[auth] login unavailable", {
+      databaseUrlConfigured: Boolean(process.env.DATABASE_URL),
+      postgresUrlConfigured: Boolean(process.env.POSTGRES_URL),
+      errorType: error instanceof Error ? error.name : "unknown",
+    });
     return redirectToLogin(request, "unavailable");
   }
 }
