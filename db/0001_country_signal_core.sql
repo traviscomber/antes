@@ -80,7 +80,7 @@ create index if not exists external_observations_geo_idx
   on external_observations (country_code, region, commune, observed_at desc);
 
 create table if not exists organizations (
-  id uuid primary key default gen_random_uuid(),
+  id text primary key,
   name text not null,
   slug text not null unique,
   data_mode text not null default 'tenant' check (data_mode in ('tenant', 'synthetic_demo')),
@@ -89,8 +89,8 @@ create table if not exists organizations (
 );
 
 create table if not exists operational_nodes (
-  id uuid primary key default gen_random_uuid(),
-  organization_id uuid not null references organizations(id) on delete cascade,
+  id text primary key,
+  organization_id text not null references organizations(id) on delete cascade,
   node_type text not null,
   external_key text,
   name text not null,
@@ -108,9 +108,9 @@ create index if not exists operational_nodes_org_type_idx
   on operational_nodes (organization_id, node_type);
 
 create table if not exists operational_signal_bindings (
-  id uuid primary key default gen_random_uuid(),
-  organization_id uuid not null references organizations(id) on delete cascade,
-  node_id uuid not null references operational_nodes(id) on delete cascade,
+  id text primary key,
+  organization_id text not null references organizations(id) on delete cascade,
+  node_id text not null references operational_nodes(id) on delete cascade,
   source_id text not null references signal_sources(id),
   signal_type text not null,
   reason text not null,
@@ -122,10 +122,10 @@ create index if not exists operational_signal_bindings_lookup_idx
   on operational_signal_bindings (organization_id, source_id, signal_type);
 
 create table if not exists operational_edges (
-  id uuid primary key default gen_random_uuid(),
-  organization_id uuid not null references organizations(id) on delete cascade,
-  from_node_id uuid not null references operational_nodes(id) on delete cascade,
-  to_node_id uuid not null references operational_nodes(id) on delete cascade,
+  id text primary key,
+  organization_id text not null references organizations(id) on delete cascade,
+  from_node_id text not null references operational_nodes(id) on delete cascade,
+  to_node_id text not null references operational_nodes(id) on delete cascade,
   edge_type text not null,
   propagates_risk boolean not null default false,
   canonical_attributes jsonb not null default '{}'::jsonb,
@@ -141,13 +141,13 @@ create index if not exists operational_edges_to_idx
   on operational_edges (organization_id, to_node_id, edge_type);
 
 create table if not exists observation_matches (
-  id uuid primary key default gen_random_uuid(),
-  organization_id uuid not null references organizations(id) on delete cascade,
+  id text primary key,
+  organization_id text not null references organizations(id) on delete cascade,
   observation_id text not null references external_observations(id) on delete cascade,
-  node_id uuid not null references operational_nodes(id) on delete cascade,
+  node_id text not null references operational_nodes(id) on delete cascade,
   match_type text not null check (match_type in ('geographic', 'dependency', 'manual')),
   rule_id text not null,
-  path_node_ids uuid[] not null,
+  path_node_ids text[] not null,
   evidence jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   unique (organization_id, observation_id, node_id, match_type, rule_id)
@@ -161,7 +161,7 @@ create index if not exists observation_matches_org_node_idx
 
 create table if not exists event_candidates (
   id text primary key,
-  organization_id uuid not null references organizations(id) on delete cascade,
+  organization_id text not null references organizations(id) on delete cascade,
   event_type text not null,
   state text not null check (state in ('observed', 'confirmed', 'dismissed', 'escalated')),
   generator_version text not null,
@@ -171,8 +171,8 @@ create table if not exists event_candidates (
   observed_at timestamptz not null,
   valid_from timestamptz,
   valid_until timestamptz,
-  direct_node_ids uuid[] not null,
-  affected_node_ids uuid[] not null,
+  direct_node_ids text[] not null,
+  affected_node_ids text[] not null,
   propagation_paths jsonb not null default '[]'::jsonb,
   evidence_refs text[] not null default '{}',
   rationale text[] not null default '{}',
