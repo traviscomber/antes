@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import styles from "../navigation.module.css";
 import type { MapLayer, MapPoint } from "@/lib/map/read-model";
 
@@ -60,7 +60,7 @@ function computeBounds(lat: number, lon: number, points: MapPoint[]): Bounds {
   const lonPad = Math.max((maxLon - minLon) * .18, .045);
   return { south: minLat - latPad, north: maxLat + latPad, west: minLon - lonPad, east: maxLon + lonPad };
 }
-function markerStyle(lat: number, lon: number, b: Bounds): React.CSSProperties {
+function markerStyle(lat: number, lon: number, b: Bounds): CSSProperties {
   const left = ((lon - b.west) / (b.east - b.west)) * 100;
   const top = (1 - (lat - b.south) / (b.north - b.south)) * 100;
   return { left: `${Math.max(1, Math.min(99, left))}%`, top: `${Math.max(1, Math.min(99, top))}%` };
