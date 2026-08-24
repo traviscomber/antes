@@ -1,4 +1,4 @@
--- ANTES Country Signal Core v0
+-- ANTEMANO Country Signal Core v0
 -- Development schema. Do not apply to production without an explicit release migration.
 
 create extension if not exists pgcrypto;
