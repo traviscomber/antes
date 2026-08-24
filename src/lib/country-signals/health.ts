@@ -1,4 +1,5 @@
 import { BancoCentralConnector } from "./connectors/banco-central";
+import { BencinaEnLineaConnector } from "./connectors/bencina-en-linea";
 import { createCenSipConnector, cenSipSourceIds } from "./connectors/cen-sip";
 import {
   ChileCompraDailyTenderConnector,
@@ -55,6 +56,7 @@ export async function getChileSignalHealth(): Promise<SourceHealth[]> {
     new SeaSeiaProjectConnector(),
     new ChileCompraDailyTenderConnector(),
     new CsnEarthquakeConnector(),
+    new BencinaEnLineaConnector(),
     ...cneFuelSourceIds.map((sourceId) => createCneFuelConnector(sourceId)),
     new CneGenerationConnector(),
   ];
