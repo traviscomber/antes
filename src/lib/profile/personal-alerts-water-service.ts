@@ -11,6 +11,7 @@ const WATER_ALERT_KEYS = [
   "water:service:current",
   "water:service:emergency",
   "water:service:scheduled",
+  "water:service:low-pressure",
 ] as const;
 const MAX_USERS_PER_PASS = 500;
 const MAX_OBSERVATIONS = 100;
@@ -128,7 +129,7 @@ async function projectWaterServiceAlerts(database: SqlExecutor): Promise<Persona
           PERSONAL_ALERT_RULE_VERSION,
           decision.reason,
           JSON.stringify({
-            sourceName: "Aguas Décima Interrupciones de Suministro",
+            sourceName: "Aguas Décima — Eventos en la vía pública",
             sourceRecordId: decision.observation.source_record_id,
             observedAt: iso(decision.observation.observed_at),
             lastSeenAt: iso(decision.observation.last_seen_at),
@@ -145,6 +146,7 @@ async function projectWaterServiceAlerts(database: SqlExecutor): Promise<Persona
             members: memberRefs,
             details: {
               interruptionKind: stringValue(payload.interruptionKind),
+              eventType: stringValue(payload.eventType),
               sector: stringValue(payload.sector),
               affectedArea: stringValue(payload.affectedArea),
               reason: stringValue(payload.reason),
@@ -184,13 +186,13 @@ async function loadCurrentWaterObservations(database: SqlExecutor): Promise<Obse
      from latest
      where version_rank = 1
        and (
-         (signal_type in ('water.service.interruption.current','water.service.interruption.emergency')
+         (signal_type in ('water.service.interruption.current','water.service.interruption.emergency','water.service.low_pressure.current')
           and last_seen_at >= now() - interval '2 hours'
           and (valid_until is null or valid_until >= now()))
          or
          (signal_type = 'water.service.interruption.scheduled'
-          and last_seen_at >= now() - interval '24 hours'
-          and valid_until >= now()
+          and last_seen_at >= now() - interval '2 hours'
+          and (valid_until is null or valid_until >= now())
           and (valid_from is null or valid_from <= now() + interval '48 hours'))
        )
      order by coalesce(valid_from, observed_at) asc
@@ -203,6 +205,7 @@ function buildWaterDecisions(rows: ObservationRow[]): WaterDecision[] {
   const current = rows.filter((row) => row.signal_type === "water.service.interruption.current");
   const emergency = rows.filter((row) => row.signal_type === "water.service.interruption.emergency");
   const scheduled = rows.filter((row) => row.signal_type === "water.service.interruption.scheduled");
+  const lowPressure = rows.filter((row) => row.signal_type === "water.service.low_pressure.current");
   const decisions: WaterDecision[] = [];
 
   if (emergency.length > 0) {
@@ -223,6 +226,15 @@ function buildWaterDecisions(rows: ObservationRow[]): WaterDecision[] {
       members: current,
     });
   }
+  if (lowPressure.length > 0) {
+    decisions.push({
+      alertKey: "water:service:low-pressure",
+      level: "warning",
+      observation: representative(lowPressure),
+      reason: groupedReason("low_pressure", lowPressure),
+      members: lowPressure,
+    });
+  }
   if (scheduled.length > 0) {
     const first = representative(scheduled);
     const start = time(first.valid_from);
@@ -238,7 +250,7 @@ function buildWaterDecisions(rows: ObservationRow[]): WaterDecision[] {
   return decisions;
 }
 
-function groupedReason(kind: "current" | "emergency" | "scheduled", rows: ObservationRow[]): string {
+function groupedReason(kind: "current" | "emergency" | "scheduled" | "low_pressure", rows: ObservationRow[]): string {
   const first = representative(rows);
   const payload = object(first.normalized_payload);
   const sector = stringValue(payload.sector);
@@ -251,6 +263,9 @@ function groupedReason(kind: "current" | "emergency" | "scheduled", rows: Observ
   }
   if (kind === "current") {
     return `Aguas Décima informa ${count === 1 ? "una interrupción de agua en proceso" : `${count} interrupciones de agua en proceso`} en Valdivia${sector ? `, sector ${sector}` : ""}${clientText}.`;
+  }
+  if (kind === "low_pressure") {
+    return `Aguas Décima informa ${count === 1 ? "un evento de baja presión de agua" : `${count} eventos de baja presión de agua`} en Valdivia${sector ? `, sector ${sector}` : ""}.`;
   }
 
   const start = time(first.valid_from);
