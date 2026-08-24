@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireSession } from "@/lib/auth/session";
 import { AnticipationPanel } from "./anticipation-panel";
+import styles from "./now.module.css";
 import { getNowSnapshot, type PersonalAlert, type PersonalSignal } from "@/lib/now/read-model";
 
 export const dynamic = "force-dynamic";
@@ -18,8 +19,14 @@ export default async function NowPage() {
   const session = await requireSession();
   const snapshot = await getNowSnapshot(session.organizationId, session.userId);
   const location = snapshot.profile?.homeCommune ?? snapshot.profile?.homeRegion ?? "tu zona";
-  const context = snapshot.personalSignals.filter((signal) => signal.signalType === "news.regional.context");
-  const relevant = snapshot.personalSignals.filter((signal) => signal.signalType !== "news.regional.context").slice(0, 8);
+  const context = snapshot.personalSignals
+    .filter((signal) => signal.signalType === "news.regional.context")
+    .sort(compareRelevantSignals)
+    .slice(0, 6);
+  const relevant = snapshot.personalSignals
+    .filter((signal) => signal.signalType !== "news.regional.context")
+    .sort(compareRelevantSignals)
+    .slice(0, 8);
   const critical = snapshot.personalAlerts.filter((alert) => alert.level === "critical").length;
   const warning = snapshot.personalAlerts.filter((alert) => alert.level === "warning").length;
 
@@ -59,7 +66,7 @@ export default async function NowPage() {
           </div>
           <p>Primero lo crítico y vigente. Los eventos futuros aparecen después, en “Antes que pase”.</p>
         </div>
-        <div className="sourceGrid">
+        <div className={`sourceGrid ${styles.grid}`}>
           {snapshot.personalAlerts.length ? snapshot.personalAlerts.map((alert) => (
             <AlertCard key={alert.id} alert={alert} />
           )) : (
@@ -80,9 +87,9 @@ export default async function NowPage() {
             <p className="sectionLabel">SEÑALES RELEVANTES</p>
             <h3 id="relevant-title">Lo que ANTEMANO está observando cerca</h3>
           </div>
-          <p>Coincidencias por comuna, región o proximidad que todavía no necesariamente requieren una alerta.</p>
+          <p>Ordenado por impacto y cercanía. Son coincidencias territoriales que todavía no necesariamente requieren una alerta.</p>
         </div>
-        <div className="sourceGrid">
+        <div className={`sourceGrid ${styles.grid}`}>
           {relevant.length ? relevant.map((signal) => (
             <SignalCard key={signal.id} signal={signal} />
           )) : (
@@ -104,8 +111,8 @@ export default async function NowPage() {
             </div>
             <p>Noticias regionales funcionan como sensor temprano. No generan alerta por sí solas.</p>
           </div>
-          <div className="sourceGrid">
-            {context.slice(0, 6).map((signal) => <SignalCard key={signal.id} signal={signal} context />)}
+          <div className={`sourceGrid ${styles.grid}`}>
+            {context.map((signal) => <SignalCard key={signal.id} signal={signal} context />)}
           </div>
         </section>
       ) : null}
@@ -132,20 +139,19 @@ function AlertCard({ alert }: { alert: PersonalAlert }) {
     <article className="sourceCard personalSignalCard">
       <div className="sourceCardTop">
         <div>
-          <p className="sourceAuthority">{alert.sourceName}</p>
+          <p className="sourceAuthority">{sourceAuthority(alert.sourceId, alert.sourceName)}</p>
           <h4>{alertLabel(alert.signalType)}</h4>
         </div>
         <span className={`statusBadge ${alert.level === "critical" ? "unavailable" : alert.level === "warning" ? "degraded" : "neutral"}`}>
           {alert.level === "critical" ? "CRÍTICA" : alert.level === "warning" ? "ATENCIÓN" : "OBSERVAR"}
         </span>
       </div>
-      <p className="sourceDescription">{alert.reason}</p>
+      <p className="sourceDescription">{localizeValue(alert.reason)}</p>
       <dl className="sourceMeta">
         <div><dt>Última evidencia</dt><dd>{chileDateFormat.format(new Date(alert.lastSeenAt))}</dd></div>
         <div><dt>Cercanía</dt><dd>{alert.distanceKm === undefined ? alert.commune ?? alert.region ?? "Regional" : `${alert.distanceKm.toFixed(1)} km`}</dd></div>
         <div><dt>Evidencia</dt><dd>{alert.itemCount} {alert.itemCount === 1 ? "registro" : "registros"}</dd></div>
       </dl>
-      <p className="sourceMessage">{alert.sourceId} · evidencia persistida</p>
     </article>
   );
 }
@@ -155,19 +161,36 @@ function SignalCard({ signal, context = false }: { signal: PersonalSignal; conte
     <article className="sourceCard personalSignalCard">
       <div className="sourceCardTop">
         <div>
-          <p className="sourceAuthority">{signal.sourceName}</p>
-          <h4>{context ? "Contexto regional" : alertLabel(signal.signalType)}</h4>
+          <p className="sourceAuthority">{sourceAuthority(signal.sourceId, signal.sourceName)}</p>
+          <h4>{context ? "Contexto regional" : signalLabel(signal)}</h4>
         </div>
-        <span className="statusBadge neutral">{context ? "CONTEXTO" : signal.relevance.toUpperCase()}</span>
+        <span className="statusBadge neutral">{context ? "CONTEXTO" : relevanceLabel(signal.relevance)}</span>
       </div>
-      <p className="sourceDescription">{signal.value ?? "Observación vigente sin valor escalar."}</p>
+      <p className="sourceDescription">{signalDescription(signal)}</p>
       <dl className="sourceMeta">
         <div><dt>Observado</dt><dd>{chileDateFormat.format(new Date(signal.observedAt))}</dd></div>
         <div><dt>Ubicación</dt><dd>{signal.distanceKm === undefined ? signal.commune ?? signal.region ?? "Regional" : `${signal.distanceKm.toFixed(1)} km`}</dd></div>
-        <div><dt>Fuente</dt><dd>{signal.sourceId}</dd></div>
+        <div><dt>Fuente</dt><dd>{sourceAuthority(signal.sourceId, signal.sourceName)}</dd></div>
       </dl>
     </article>
   );
+}
+
+function compareRelevantSignals(a: PersonalSignal, b: PersonalSignal) {
+  const priority = signalPriority(a) - signalPriority(b);
+  if (priority !== 0) return priority;
+  const aDistance = a.distanceKm ?? Number.POSITIVE_INFINITY;
+  const bDistance = b.distanceKm ?? Number.POSITIVE_INFINITY;
+  if (aDistance !== bDistance) return aDistance - bDistance;
+  return new Date(b.observedAt).getTime() - new Date(a.observedAt).getTime();
+}
+
+function signalPriority(signal: PersonalSignal) {
+  const type = signal.signalType.toLowerCase();
+  if (type.includes("outage") || type.includes("emergency") || type.includes("tsunami") || type.includes("wildfire")) return 0;
+  if (type.includes("weather") || type.includes("air_quality") || type.includes("water")) return 1;
+  if (type.includes("fuel") || type.includes("retail_price")) return 2;
+  return 3;
 }
 
 function headline(total: number, critical: number, location: string) {
@@ -182,13 +205,79 @@ function statusLine(total: number, critical: number, warning: number, relevant: 
 }
 
 function alertLabel(signalType: string) {
-  if (signalType === "energy.power.outage.current") return "Corte eléctrico vigente";
-  if (signalType === "energy.power.outage.scheduled") return "Corte eléctrico programado";
-  if (signalType === "marine.weather.official_notice") return "Aviso marítimo oficial";
-  if (signalType === "infrastructure.mop.emergency") return "Emergencia de infraestructura";
-  if (signalType === "logistics.road.emergency") return "Emergencia vial";
-  if (signalType.includes("wildfire")) return "Incendio / condición de incendio";
-  if (signalType.includes("weather")) return "Condición meteorológica";
-  if (signalType.includes("water")) return "Condición hídrica";
-  return signalType.replaceAll(".", " ");
+  const type = signalType.toLowerCase();
+  if (type === "energy.power.outage.current") return "Corte eléctrico vigente";
+  if (type === "energy.power.outage.scheduled") return "Corte eléctrico programado";
+  if (type === "marine.weather.official_notice") return "Aviso marítimo oficial";
+  if (type === "infrastructure.mop.emergency") return "Emergencia de infraestructura";
+  if (type === "logistics.road.emergency") return "Emergencia vial";
+  if (type.includes("tsunami")) return "Riesgo y cobertura de tsunami";
+  if (type.includes("wildfire")) return "Incendio / condición de incendio";
+  if (type.includes("weather")) return "Condición meteorológica";
+  if (type.includes("air_quality")) return "Calidad del aire";
+  if (type.includes("water")) return "Condición hídrica";
+  if (type.includes("fuel") || type.includes("retail_price")) return "Precio de combustible";
+  return "Señal territorial";
+}
+
+function signalLabel(signal: PersonalSignal) {
+  const type = signal.signalType.toLowerCase();
+  if (type.includes("fuel") || type.includes("retail_price")) {
+    return `Precio de ${fuelLabel(signal.profileFuelType)}`;
+  }
+  if (type.includes("air_quality.so2") || type.endsWith(".so2")) return "Calidad del aire · SO₂";
+  if (type.includes("air_quality.pm25") || type.includes("pm2.5")) return "Calidad del aire · MP2,5";
+  if (type.includes("air_quality.pm10")) return "Calidad del aire · MP10";
+  return alertLabel(signal.signalType);
+}
+
+function signalDescription(signal: PersonalSignal) {
+  const raw = signal.value ?? "Observación vigente sin valor escalar.";
+  const localized = localizeValue(raw);
+  if ((signal.signalType.includes("fuel") || signal.signalType.includes("retail_price")) && signal.stationBrand) {
+    const location = signal.stationAddress ? ` · ${signal.stationAddress}` : "";
+    return `${localized} · ${signal.stationBrand}${location}`;
+  }
+  return localized;
+}
+
+function localizeValue(value: string) {
+  return value
+    .replace(/(\d+)\s+affected_customers/gi, "$1 clientes afectados")
+    .replace(/affected customers/gi, "clientes afectados")
+    .replace(/customers affected/gi, "clientes afectados")
+    .replace(/self[- ]service/gi, "autoservicio")
+    .replace(/scheduled outage/gi, "corte programado")
+    .replace(/current outage/gi, "corte vigente")
+    .replace(/retail price/gi, "precio de venta");
+}
+
+function sourceAuthority(sourceId: string, sourceName: string) {
+  if (sourceId.includes("saesa")) return "SAESA";
+  if (sourceId.includes("shoa")) return "SHOA";
+  if (sourceId.includes("sinca")) return "MMA / SINCA";
+  if (sourceId.includes("cne")) return "CNE";
+  if (sourceId.includes("senapred")) return "SENAPRED";
+  if (sourceId.includes("directemar")) return "DIRECTEMAR";
+  if (sourceId.includes("dmc")) return "DMC";
+  if (sourceId.includes("conaf")) return "CONAF";
+  if (sourceId.includes("csn")) return "CSN";
+  if (sourceId.includes("mop") || sourceId.includes("vialidad")) return "MOP";
+  return sourceName;
+}
+
+function relevanceLabel(relevance: PersonalSignal["relevance"]) {
+  if (relevance === "comuna") return "COMUNA";
+  if (relevance === "region") return "REGIÓN";
+  return "CERCA";
+}
+
+function fuelLabel(value?: string) {
+  if (!value) return "combustible";
+  const normalized = value.toLowerCase();
+  if (normalized.includes("93")) return "bencina 93";
+  if (normalized.includes("95")) return "bencina 95";
+  if (normalized.includes("97")) return "bencina 97";
+  if (normalized.includes("diesel") || normalized.includes("diésel")) return "diésel";
+  return "combustible";
 }
