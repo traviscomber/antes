@@ -18,6 +18,7 @@ export default async function NowPage() {
         <div className="topbarMeta">
           <span>{session.organizationName}</span>
           <span>{session.role}</span>
+          <Link href="/app/graph">GRAFO</Link>
           <Link href="/app/sources">FUENTES</Link>
         </div>
       </header>
@@ -178,6 +179,7 @@ export default async function NowPage() {
               <div><dt>Matches</dt><dd>{snapshot.observationMatches}</dd></div>
               <div><dt>Eventos</dt><dd>{snapshot.activeEvents}</dd></div>
             </dl>
+            <p className="sourceMessage"><Link href="/app/graph">Ver grafo operacional</Link></p>
           </article>
 
           <article className="sourceCard">
