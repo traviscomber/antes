@@ -17,7 +17,7 @@ describe("Coordinador SIP normalization helpers", () => {
     ).toEqual([{ id: "a" }, { id: "b" }]);
   });
 
-  it("does not invent rows from scalar metadata", () => {
+  it("preserves a single-object response until the authenticated contract is validated", () => {
     expect(extractRows({ page: 0, totalPages: 2, totalElements: 2000 })).toEqual([
       { page: 0, totalPages: 2, totalElements: 2000 },
     ]);
