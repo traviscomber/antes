@@ -3,6 +3,12 @@ import { BancoCentralConnector } from "./banco-central";
 import { CneGenerationConnector } from "./cne-generation";
 import { DmcWrfConnector } from "./dmc";
 import { LeyChileConnector } from "./leychile";
+import {
+  BorderCrossingsConnector,
+  DgaAlertsConnector,
+  MopInfrastructureEmergenciesConnector,
+  VialidadEmergenciesConnector,
+} from "./mop-arcgis";
 import { ObservatorioLogisticoConnector } from "./observatorio-logistico";
 
 export function createCountrySignalConnector(
@@ -15,6 +21,14 @@ export function createCountrySignalConnector(
       return new ObservatorioLogisticoConnector();
     case "cl.bcn.leychile":
       return new LeyChileConnector();
+    case "cl.dga.hydrometric":
+      return new DgaAlertsConnector();
+    case "cl.mop.vialidad.emergencias":
+      return new VialidadEmergenciesConnector();
+    case "cl.mop.vialidad.pasos-fronterizos":
+      return new BorderCrossingsConnector();
+    case "cl.mop.emergencias-infraestructura":
+      return new MopInfrastructureEmergenciesConnector();
     case "cl.bcch.bde":
       return new BancoCentralConnector();
     case "cl.cne.generacion-bruta":
