@@ -1,30 +1,25 @@
-const api = 'https://vipnet.mop.gob.cl';
-const stationCode = '10122003-6';
-const now = new Date(Date.now() - 60 * 60 * 1000);
-const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' }).formatToParts(now);
-const read = (type) => parts.find((part) => part.type === type)?.value ?? '';
-const fetchDay = `${read('year')}-${read('month')}-${read('day')}`;
-const fetchHour = Number(read('hour'));
-const headers = { Accept: 'application/json', 'Content-Type': 'application/json', Origin: api, Referer: `${api}/` };
-
-for (const tipoEstacion of [0,1,2,3,4,5,6,7,10,11,71]) {
-  try {
-    const response = await fetch(`${api}/v1/vipnet/estacion/valores`, {
-      method: 'POST', headers,
-      body: JSON.stringify({ codigoEstacion: stationCode, tipoEstacion, fetchHour, fetchDay, hoursRange: 24 }),
-      signal: AbortSignal.timeout(12000),
-    });
-    const text = await response.text();
-    let payload = null;
-    try { payload = JSON.parse(text); } catch {}
-    const data = Array.isArray(payload?.data) ? payload.data : [];
-    console.log('VIPNET_STATION_SERIES', JSON.stringify({
-      tipoEstacion, status: response.status, contentType: response.headers.get('content-type'), textLength: text.length,
-      rows: data.length, first: data[0] ?? null, last: data.at(-1) ?? null,
-      values: data.slice(-8).map((row) => row.instantaneo),
-      bodyPrefix: text.slice(0, 180),
-    }));
-  } catch (error) {
-    console.log('VIPNET_STATION_SERIES', JSON.stringify({ tipoEstacion, error: String(error).slice(0, 180) }));
-  }
+const url = 'https://snia.mop.gob.cl/sat/site/informes/mapas/mapas.xhtml';
+const response = await fetch(url, {
+  headers: {
+    Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/151 Safari/537.36',
+  },
+  redirect: 'follow',
+  signal: AbortSignal.timeout(20000),
+});
+const html = await response.text();
+console.log('HIDROLINEA_PAGE', JSON.stringify({
+  status: response.status,
+  finalUrl: response.url,
+  contentType: response.headers.get('content-type'),
+  length: html.length,
+  title: html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.replace(/\s+/g,' ').trim(),
+  forms: [...html.matchAll(/<form\b[^>]*(?:action=["']([^"']*)["'])?[^>]*>/gi)].slice(0,10).map((m)=>m[1] ?? ''),
+  scripts: [...html.matchAll(/<script\b[^>]+src=["']([^"']+)["']/gi)].slice(0,30).map((m)=>m[1]),
+  hidden: [...html.matchAll(/<input\b[^>]*type=["']hidden["'][^>]*>/gi)].slice(0,30).map((m)=>m[0]),
+  hrefs: [...html.matchAll(/href=["']([^"']+)["']/gi)].map((m)=>m[1]).filter((x)=>/map|estac|caudal|nivel|informe|sat/i.test(x)).slice(0,50),
+}));
+for (const token of ['Pupunahue','Calle Calle','caudal','nivel','fluviometr','station','estacion','google.maps','ViewState','javax.faces']) {
+  const index = html.toLowerCase().indexOf(token.toLowerCase());
+  if (index >= 0) console.log('HIDROLINEA_HTML_HINT', JSON.stringify({ token, snippet: html.slice(Math.max(0,index-1000), index+2500).replace(/\s+/g,' ') }));
 }
