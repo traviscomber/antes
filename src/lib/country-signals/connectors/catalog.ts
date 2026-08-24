@@ -22,6 +22,9 @@ import {
 } from "./mop-live-overrides";
 import { ObservatorioLogisticoConnector } from "./observatorio-logistico";
 import { OdepaWholesaleProduceConnector } from "./odepa-wholesale";
+import { RioenLineaRegionalNewsConnector } from "./rioenlinea";
+import { SaesaPowerOutageConnector } from "./saesa";
+import { SenapredOfficialAlertConnector } from "./senapred";
 import { SincaAirQualityConnector } from "./sinca";
 import {
   SeaSeiaProjectConnector,
@@ -56,6 +59,12 @@ export function createCountrySignalConnector(
       return new ConafWildfireForecastConnector();
     case "cl.conaf.active-fires":
       return new ConafActiveFiresConnector();
+    case "cl.senapred.official-alerts":
+      return new SenapredOfficialAlertConnector();
+    case "cl.saesa.power-outages":
+      return new SaesaPowerOutageConnector();
+    case "cl.rioenlinea.regional-news":
+      return new RioenLineaRegionalNewsConnector();
     case "cl.cen.cmg-online":
       return createCenSipConnector("cl.cen.cmg-online");
     case "cl.cen.demand-net":
