@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
+import { refreshPersonalAlertsForUser } from "@/lib/profile/personal-alerts";
 import { saveUserProfile, type FuelType } from "@/lib/profile/user-profile";
 
 export const runtime = "nodejs";
@@ -39,10 +40,19 @@ export async function POST(request: NextRequest) {
       fuelType,
       tankCapacityLiters,
     });
-    return redirectProfile(request, "saved");
   } catch {
     return redirectProfile(request, "unavailable");
   }
+
+  try {
+    await refreshPersonalAlertsForUser(session.userId);
+  } catch (error) {
+    // The profile is canonical user input and must remain saved even if a derived
+    // alert refresh fails. The next successful source ingestion will retry it.
+    console.error("Personal alert refresh failed after profile update", error);
+  }
+
+  return redirectProfile(request, "saved");
 }
 
 function field(form: FormData, name: string, maxLength: number): string | undefined {
