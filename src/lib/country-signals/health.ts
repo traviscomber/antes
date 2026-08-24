@@ -11,6 +11,7 @@ import {
   probeConafRedButtonStoryMapHealth,
 } from "./connectors/conaf-active-fires";
 import { probeConafForecastHealth } from "./connectors/conaf";
+import { CsnEarthquakeConnector } from "./connectors/csn";
 import { DgaScarcityDecreeConnector } from "./connectors/dga-scarcity";
 import { DgaVipNetReservoirConnector } from "./connectors/dga-vipnet";
 import { DmcWrfConnector } from "./connectors/dmc";
@@ -25,6 +26,7 @@ import {
 } from "./connectors/mop-live-overrides";
 import { ObservatorioLogisticoConnector } from "./connectors/observatorio-logistico";
 import { OdepaWholesaleProduceConnector } from "./connectors/odepa-wholesale";
+import { probeSernageominVolcanicAlertHealth } from "./connectors/sernageomin";
 import { SincaAirQualityConnector } from "./connectors/sinca";
 import {
   SeaSeiaProjectConnector,
@@ -52,6 +54,7 @@ export async function getChileSignalHealth(): Promise<SourceHealth[]> {
     new SmaSnifaSanctioningConnector(),
     new SeaSeiaProjectConnector(),
     new ChileCompraDailyTenderConnector(),
+    new CsnEarthquakeConnector(),
     ...cneFuelSourceIds.map((sourceId) => createCneFuelConnector(sourceId)),
     new CneGenerationConnector(),
   ];
@@ -63,6 +66,7 @@ export async function getChileSignalHealth(): Promise<SourceHealth[]> {
   activeChecks.set("cl.conaf.wildfire-forecast", probeConafForecastHealth());
   activeChecks.set("cl.conaf.boton-rojo", probeConafRedButtonStoryMapHealth());
   activeChecks.set("cl.chilecompra.ocds", probeChileCompraOcdsHealth());
+  activeChecks.set("cl.sernageomin.volcanic-alerts", probeSernageominVolcanicAlertHealth());
 
   return Promise.all(
     chileSignalSources.map(async (source) => {
