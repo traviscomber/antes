@@ -1,6 +1,7 @@
 import type { CountrySignalConnector } from "../types";
 import { BancoCentralConnector } from "./banco-central";
 import { createCenSipConnector } from "./cen-sip";
+import { createCneFuelConnector } from "./cne-fuels";
 import { CneGenerationConnector } from "./cne-generation";
 import { ConafActiveFiresConnector } from "./conaf-active-fires";
 import { ConafWildfireForecastConnector } from "./conaf";
@@ -61,6 +62,10 @@ export function createCountrySignalConnector(
       return createCenSipConnector("cl.cen.fuel-stock");
     case "cl.bcch.bde":
       return new BancoCentralConnector();
+    case "cl.cne.liquid-fuel-prices":
+      return createCneFuelConnector("cl.cne.liquid-fuel-prices");
+    case "cl.cne.liquid-fuel-sales":
+      return createCneFuelConnector("cl.cne.liquid-fuel-sales");
     case "cl.cne.generacion-bruta":
       return new CneGenerationConnector();
     default:
