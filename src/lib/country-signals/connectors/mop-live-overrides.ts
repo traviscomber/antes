@@ -6,7 +6,8 @@ import type {
   SourceHealth,
 } from "../types";
 import {
-  fetchArcGisDirectFeatures,
+  arcGisEvidenceUrl,
+  arcGisText,
   fetchArcGisFeatureCount,
   fetchArcGisFeatures,
 } from "./arcgis";
@@ -18,21 +19,26 @@ import {
 const DGA_SOURCE = requireCountrySignalSource("cl.dga.hydrometric");
 const MOP_SOURCE = requireCountrySignalSource("cl.mop.emergencias-infraestructura");
 
+const DGA_READINGS_TABLE =
+  "https://rest-sit.mop.gob.cl/arcgis/rest/services/EMERGENCIA/MAPA_ESTACIONES_DGA/MapServer/1";
+const DGA_STATIONS_LAYER =
+  "https://rest-sit.mop.gob.cl/arcgis/rest/services/DGA/Red_Hidrometrica/MapServer/0";
+
 export class DgaDirectAlertsConnector implements CountrySignalConnector {
   readonly source = DGA_SOURCE;
-  readonly parserVersion = "dga-alertas-arcgis@2";
+  readonly parserVersion = "dga-alertas-arcgis@3";
 
   async healthCheck(): Promise<SourceHealth> {
     const checkedAt = new Date().toISOString();
     const startedAt = Date.now();
     try {
-      const features = await fetchArcGisDirectFeatures(this.source.canonicalUrl);
+      const count = await fetchArcGisFeatureCount(DGA_READINGS_TABLE);
       return {
         sourceId: this.source.id,
-        state: features.length > 0 ? "healthy" : "degraded",
+        state: count > 0 ? "healthy" : "degraded",
         checkedAt,
         latencyMs: Date.now() - startedAt,
-        message: `${features.length} DGA alert-station rows available through the joined view.`,
+        message: `${count} current DGA hydrometric readings available.`,
       };
     } catch (error) {
       return failureHealth(this.source.id, checkedAt, startedAt, error);
@@ -42,17 +48,59 @@ export class DgaDirectAlertsConnector implements CountrySignalConnector {
   async ingest(): Promise<IngestionBatch> {
     const fetchedAt = new Date().toISOString();
     const startedAt = Date.now();
-    const features = await fetchArcGisDirectFeatures(this.source.canonicalUrl);
-    const observations = features
-      .map((feature) => normalizeDgaFeature(feature, fetchedAt, this.parserVersion))
+    const [readings, stations] = await Promise.all([
+      fetchArcGisFeatures(DGA_READINGS_TABLE),
+      fetchArcGisFeatures(DGA_STATIONS_LAYER),
+    ]);
+
+    const stationsByCode = new Map(
+      stations
+        .map((station) => [arcGisText(station.attributes, "CODBNA"), station] as const)
+        .filter((entry): entry is readonly [string, (typeof stations)[number]] => Boolean(entry[0])),
+    );
+
+    let joinedWithStation = 0;
+    const observations = readings
+      .map((reading) => {
+        const stationCode = arcGisText(reading.attributes, "mod_codest");
+        const station = stationCode ? stationsByCode.get(stationCode) : undefined;
+        if (station) joinedWithStation += 1;
+
+        const observation = normalizeDgaFeature(
+          {
+            attributes: {
+              ...(station?.attributes ?? {}),
+              ...reading.attributes,
+            },
+            geometry: station?.geometry,
+          },
+          fetchedAt,
+          this.parserVersion,
+        );
+
+        if (!observation) return undefined;
+        return {
+          ...observation,
+          rawEvidenceRef: arcGisEvidenceUrl(DGA_READINGS_TABLE),
+          normalizedPayload: {
+            ...observation.normalizedPayload,
+            stationMetadataMatched: Boolean(station),
+            stationCatalogUrl: DGA_STATIONS_LAYER,
+          },
+        } satisfies ExternalObservation;
+      })
       .filter((value): value is ExternalObservation => value !== undefined);
+
+    if (observations.length === 0) {
+      throw new Error("DGA current-readings table returned no usable hydrometric observations.");
+    }
 
     return successBatch(
       this.source.id,
       fetchedAt,
       this.parserVersion,
       observations,
-      `${features.length} DGA station rows normalized into ${observations.length} timestamped river-flow signals.`,
+      `${readings.length} DGA current readings normalized; ${joinedWithStation} matched to station metadata/geography.`,
       startedAt,
     );
   }
