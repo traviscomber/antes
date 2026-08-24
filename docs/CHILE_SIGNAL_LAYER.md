@@ -20,6 +20,7 @@ Una señal pública no es automáticamente un evento. Sin una dependencia verifi
 | Fuente | Señal | Acceso | Estado |
 | --- | --- | --- | --- |
 | CONAF — Pronóstico de Riesgo | PI ≥70% geoespacial + resumen diario de humedad de combustible | abierto / ArcGIS GEPRIF | **LIVE** |
+| CONAF — Incendios Activos | incidentes no extinguidos, estado, superficie y ubicación | abierto / Power BI público CONAF | **LIVE** |
 | CNE — Generación Bruta | generación mensual por tecnología y subsistema | abierto / datos.gob.cl | **LIVE** |
 | DGA — Alertas Fluviométricas | alertas Azul, Amarilla y Roja + lectura/umbral | abierto / ArcGIS MOP | **LIVE** |
 | MOP — Emergencias Viales | ruta, tránsito, restricción, gravedad y operatividad | abierto / ArcGIS MOP | **LIVE** |
@@ -36,15 +37,7 @@ El dashboard oficial `Pronóstico de Riesgo` de GEPRIF/CONAF fue resuelto hasta 
 - `HC/0..4` — humedad de combustible fino muerto;
 - además expone temperatura, viento y humedad relativa, que no se incorporan todavía a este conector.
 
-ANTEMANO conserva por celda únicamente `PI >= 70%`, porque 70% es el umbral explícito que CONAF utiliza en la definición pública de Botón Rojo. Cada señal mantiene:
-
-- fecha objetivo del pronóstico;
-- porcentaje de PI;
-- FID de la celda;
-- centroide WGS84;
-- polígono original dentro de la evidencia normalizada;
-- vigencia diaria;
-- nivel derivado `warning / high / critical` para priorización interna.
+ANTEMANO conserva por celda únicamente `PI >= 70%`, porque 70% es el umbral explícito que CONAF utiliza en la definición pública de Botón Rojo. Cada señal mantiene fecha objetivo, porcentaje de PI, FID, centroide WGS84, polígono original y vigencia diaria.
 
 La humedad de combustible no recibe un umbral de alerta inventado por ANTEMANO. Cada horizonte produce un resumen nacional verificable con promedio, mínimo, máximo y conteos descriptivos de celdas `<=6`, `<=8` y `<=10`.
 
@@ -56,6 +49,31 @@ Primera carga productiva verificada el 24 de agosto de 2026:
 - segunda ejecución: **0 nuevas / 2.298 duplicadas**.
 
 El horizonte observado durante la validación cubría del 23 al 27 de agosto de 2026. La escritura Neon fue cambiada a lotes parametrizados para evitar miles de round-trips individuales y mantener `ON CONFLICT DO NOTHING`.
+
+### CONAF — Incendios Activos
+
+Conector: `cl.conaf.active-fires`.
+
+La página oficial de situación actual publica un reporte Power BI público actualizado cada cinco minutos. ANTEMANO no hace scraping visual: resuelve el contrato `publish-to-web`, identifica el modelo y la sección `Situación Actual`, reutiliza la consulta semántica del visual oficial y decodifica la respuesta DSR de Power BI.
+
+El visual validado proyecta:
+
+- latitud y longitud;
+- fecha/hora de inicio;
+- superficie afectada;
+- nombre del incendio;
+- región y comuna;
+- ámbito responsable;
+- estado operacional.
+
+La consulta de validación devolvió **31** incidentes mapeados de la temporada. Para la señal `fire.wildfire.active`, ANTEMANO conserva únicamente estados operacionales no extinguidos publicados por CONAF (`En combate`, `Controlado`, `Bajo observación` o `En trayecto`). `Extinguido` no se convierte en incendio activo.
+
+Primera carga productiva verificada el 24 de agosto de 2026:
+
+- **1** incidente operacional activo normalizado y aceptado;
+- segunda ejecución del mismo snapshot: **0 nuevas / 1 duplicada**.
+
+El visual de mapa no proyecta el ID nativo del incendio, por lo que `sourceRecordId` se construye explícitamente como identidad compuesta de nombre oficial + inicio + coordenadas operacionales. El ID de observación agrega estado y superficie para crear una nueva revisión sólo cuando el hecho cambia, no en cada polling.
 
 ### CNE — Generación Bruta
 
@@ -84,15 +102,7 @@ Para anticipación hidrológica previa a la alerta formal necesitaremos una fuen
 
 Conector: `cl.mop.vialidad.emergencias`.
 
-Normaliza:
-
-- fecha del evento;
-- ruta y kilómetros;
-- tránsito;
-- restricción;
-- operatividad;
-- gravedad;
-- geometría WGS84.
+Normaliza fecha del evento, ruta y kilómetros, tránsito, restricción, operatividad, gravedad y geometría WGS84.
 
 Primera carga productiva: **918** observaciones. Segunda carga: **0 nuevas / 918 duplicadas**.
 
@@ -114,25 +124,17 @@ El servidor ArcGIS 10.2 requiere lotes pequeños. ANTEMANO recupera por object I
 
 Carga productiva completa verificada: **4.569** observaciones. Segunda carga completa: **0 nuevas / 4.569 duplicadas**.
 
-## CONAF — contratos todavía no habilitados
+## CONAF — contrato degradado
 
 ### Botón Rojo
 
 Fuente registrada: `cl.conaf.boton-rojo`.
 
-CONAF define Botón Rojo cuando coinciden una probabilidad de ignición mayor o igual a 70% y viento mayor o igual a 20 km/h durante la ventana crítica de la tarde. La publicación ofrece proyección de hasta cinco días.
+CONAF define Botón Rojo cuando coinciden una probabilidad de ignición mayor o igual a 70% y viento mayor o igual a 20 km/h durante la ventana crítica de 14:00 a 18:59.
 
-El item ArcGIS histórico previamente indexado (`41ee3c691359437aa9df2a09d7f6124e`) devolvió `Item does not exist or is inaccessible` tanto desde ArcGIS global como desde el portal GEPRIF durante la validación del 24 de agosto de 2026. La página oficial continúa mostrando el bloque de Botón Rojo y enlaces embebidos, pero ANTEMANO no lo declara LIVE hasta identificar y probar el contrato vigente.
+La publicación vigente enlaza el StoryMap público `Botón Rojo - CONAF` (`c3abb6aeb9fe443cbb4bff3efc6b0d08`). El StoryMap fue resuelto por ArcGIS REST durante la validación del 24 de agosto de 2026: es público y propiedad de `deigeprif`, pero no expone ningún `FeatureServer` ni `MapServer` vinculado. Su único item relacionado detectable es el tema visual del StoryMap.
 
-Aunque el dashboard de pronóstico expone también `PI` y `VV`, ANTEMANO no reconstruye por ahora un “Botón Rojo oficial” combinándolos: faltaría demostrar que la capa de viento representa exactamente la ventana operacional 14:00–18:59 usada por CONAF.
-
-### Incendios activos
-
-Fuente registrada: `cl.conaf.active-fires`.
-
-La página oficial publica la situación de incendios con información actualizada cada cinco minutos y actualmente expone reportes Power BI públicos. Esos embeds son observables, pero todavía no se ha validado un contrato CONAF/SIDCO estable y machine-readable para uso productivo.
-
-**Regla:** no se hará scraping visual ni se declarará una API inferida como fuente oficial. La ingesta de incendios activos seguirá deshabilitada hasta encontrar y probar un endpoint estructurado con trazabilidad suficiente.
+Por ello el health de la fuente queda **degraded**, no LIVE. ANTEMANO no reconstruye un “Botón Rojo oficial” combinando por cuenta propia PI y viento: faltaría demostrar el contrato operacional que CONAF efectivamente publica para esa declaración y su ventana horaria exacta.
 
 ## Fuentes implementadas que requieren credenciales
 
@@ -169,7 +171,7 @@ Conector para USD/CLP y UF. Requiere `BCCH_BDE_TOKEN`.
 
 ## Próximo radar oficial
 
-Con el primer contrato CONAF productivo ya cerrado, la prioridad es:
+Con CONAF cerrado hasta el límite de sus contratos públicos actuales, la prioridad es:
 
 1. **Coordinador Eléctrico Nacional** — demanda, generación, transmisión, costos marginales, embalses y combustible;
 2. **SINCA / MMA** — calidad del aire horaria;
