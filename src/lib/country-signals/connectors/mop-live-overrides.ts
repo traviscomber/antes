@@ -53,43 +53,43 @@ export class DgaDirectAlertsConnector implements CountrySignalConnector {
       fetchArcGisFeatures(DGA_STATIONS_LAYER),
     ]);
 
-    const stationsByCode = new Map(
-      stations
-        .map((station) => [arcGisText(station.attributes, "CODBNA"), station] as const)
-        .filter((entry): entry is readonly [string, (typeof stations)[number]] => Boolean(entry[0])),
-    );
+    const stationsByCode = new Map<string, (typeof stations)[number]>();
+    for (const station of stations) {
+      const code = arcGisText(station.attributes, "CODBNA");
+      if (code) stationsByCode.set(code, station);
+    }
 
     let joinedWithStation = 0;
-    const observations = readings
-      .map((reading) => {
-        const stationCode = arcGisText(reading.attributes, "mod_codest");
-        const station = stationCode ? stationsByCode.get(stationCode) : undefined;
-        if (station) joinedWithStation += 1;
+    const observations: ExternalObservation[] = [];
 
-        const observation = normalizeDgaFeature(
-          {
-            attributes: {
-              ...(station?.attributes ?? {}),
-              ...reading.attributes,
-            },
-            geometry: station?.geometry,
-          },
-          fetchedAt,
-          this.parserVersion,
-        );
+    for (const reading of readings) {
+      const stationCode = arcGisText(reading.attributes, "mod_codest");
+      const station = stationCode ? stationsByCode.get(stationCode) : undefined;
+      if (station) joinedWithStation += 1;
 
-        if (!observation) return undefined;
-        return {
-          ...observation,
-          rawEvidenceRef: arcGisEvidenceUrl(DGA_READINGS_TABLE),
-          normalizedPayload: {
-            ...observation.normalizedPayload,
-            stationMetadataMatched: Boolean(station),
-            stationCatalogUrl: DGA_STATIONS_LAYER,
+      const observation = normalizeDgaFeature(
+        {
+          attributes: {
+            ...(station?.attributes ?? {}),
+            ...reading.attributes,
           },
-        } satisfies ExternalObservation;
-      })
-      .filter((value): value is ExternalObservation => value !== undefined);
+          geometry: station?.geometry,
+        },
+        fetchedAt,
+        this.parserVersion,
+      );
+      if (!observation) continue;
+
+      observations.push({
+        ...observation,
+        rawEvidenceRef: arcGisEvidenceUrl(DGA_READINGS_TABLE),
+        normalizedPayload: {
+          ...observation.normalizedPayload,
+          stationMetadataMatched: Boolean(station),
+          stationCatalogUrl: DGA_STATIONS_LAYER,
+        },
+      });
+    }
 
     if (observations.length === 0) {
       throw new Error("DGA current-readings table returned no usable hydrometric observations.");
