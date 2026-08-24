@@ -13,41 +13,65 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  const targets = [
-    "https://www.bcn.cl/leychile/api/v1/servicio/3/?cantidad=10",
-    "https://www.bcn.cl/leychile/leychile-api-doc/paths/servicio_3_v1.yaml",
-  ];
+  const packageUrl =
+    "https://datos.gob.cl/api/3/action/package_show?id=generacion-bruta";
 
-  const results = await Promise.all(
-    targets.map(async (url) => {
-      try {
-        const response = await fetch(url, {
-          headers: {
-            Accept: "application/xml,text/yaml,text/plain;q=0.9,*/*;q=0.5",
-            "User-Agent": "N3uralia-ANTEMANO/0.1 (+https://www.antemano.app)",
-          },
-          cache: "no-store",
-          signal: AbortSignal.timeout(10_000),
-        });
-        const body = await response.text();
-        return {
-          url,
-          status: response.status,
-          contentType: response.headers.get("content-type"),
-          sample: body.slice(0, 12000),
-        };
-      } catch (error) {
-        return {
-          url,
-          status: null,
-          contentType: null,
-          error: error instanceof Error ? error.name : "unknown",
-        };
-      }
-    }),
+  const response = await fetch(packageUrl, {
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "N3uralia-ANTEMANO/0.1 (+https://www.antemano.app)",
+    },
+    cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
+  });
+  const payload = (await response.json()) as Record<string, unknown>;
+  const result = payload.result as Record<string, unknown> | undefined;
+  const resources = Array.isArray(result?.resources)
+    ? (result?.resources as Array<Record<string, unknown>>)
+    : [];
+
+  const resourceSummaries = resources.map((resource) => ({
+    id: resource.id,
+    name: resource.name,
+    format: resource.format,
+    datastore_active: resource.datastore_active,
+    url: resource.url,
+    last_modified: resource.last_modified,
+  }));
+
+  const datastoreResource = resources.find(
+    (resource) => resource.datastore_active === true && typeof resource.id === "string",
   );
 
-  return NextResponse.json({ results });
+  let dataSample: unknown = null;
+  if (datastoreResource?.id) {
+    const dataUrl = new URL("https://datos.gob.cl/api/3/action/datastore_search");
+    dataUrl.searchParams.set("resource_id", String(datastoreResource.id));
+    dataUrl.searchParams.set("limit", "5");
+    const dataResponse = await fetch(dataUrl, {
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "N3uralia-ANTEMANO/0.1 (+https://www.antemano.app)",
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
+    });
+    dataSample = await dataResponse.json();
+  }
+
+  return NextResponse.json({
+    packageStatus: response.status,
+    dataset: {
+      id: result?.id,
+      name: result?.name,
+      title: result?.title,
+      metadata_modified: result?.metadata_modified,
+      license_title: result?.license_title,
+      organization: result?.organization,
+    },
+    resources: resourceSummaries,
+    dataSample,
+  });
 }
 
 function validToken(token: string): boolean {
