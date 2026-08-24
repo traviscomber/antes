@@ -33,7 +33,6 @@ import { ObservatorioLogisticoConnector } from "./connectors/observatorio-logist
 import { OdepaWholesaleProduceConnector } from "./connectors/odepa-wholesale";
 import { RioenLineaRegionalNewsConnector } from "./connectors/rioenlinea";
 import { SaesaPowerOutageConnector } from "./connectors/saesa";
-import { SecNationalPowerOutageConnector } from "./connectors/sec-power-outages";
 import { SenapredOfficialAlertConnector } from "./connectors/senapred";
 import { probeSernageominVolcanicAlertHealth } from "./connectors/sernageomin";
 import { probeShoACitsuHealth } from "./connectors/shoa-citsu";
@@ -61,7 +60,6 @@ export async function getChileSignalHealth(): Promise<SourceHealth[]> {
     new MopAllInfrastructureEmergenciesConnector(),
     new ConafActiveFiresConnector(),
     new SenapredOfficialAlertConnector(),
-    new SecNationalPowerOutageConnector(),
     new SaesaPowerOutageConnector(),
     new AguasDecimaCurrentEventsConnector(),
     new RioenLineaRegionalNewsConnector(),
@@ -97,8 +95,9 @@ export async function getChileSignalHealth(): Promise<SourceHealth[]> {
         sourceId: source.id,
         state: "planned" as const,
         checkedAt: new Date().toISOString(),
-        message:
-          "Source validated for product value, but no stable production connector has been enabled yet.",
+        message: source.id === "cl.sec.power-outages-national"
+          ? "SEC national outage connector is staged for a production-runtime connectivity probe; it is not yet used for personal alerts."
+          : "Source validated for product value, but no stable production connector has been enabled yet.",
       };
     }),
   );
