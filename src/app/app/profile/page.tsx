@@ -77,7 +77,7 @@ export default async function ProfilePage({
             <p className="sectionLabel">PREFERENCIAS</p>
             <h3>Qué te puede afectar</h3>
           </div>
-          <p>Comuna y región dan contexto amplio. La ubicación precisa permite calcular cercanía real. Vehículo y combustible convierten señales de mercado en impacto personal.</p>
+          <p>Comuna y región dan contexto amplio. La ubicación precisa permite calcular cercanía real. Combustible y estanque se cruzan con precios actuales de CNE Bencina en Línea para mostrar costo personal.</p>
         </div>
 
         <form className="profileForm" action="/api/profile" method="post">
@@ -139,7 +139,7 @@ export default async function ProfilePage({
         <div>
           <p className="sectionLabel">ALERTAS PERSONALES</p>
           <h3>La misma señal produce resultados distintos para cada usuario.</h3>
-          <p>ANTEMANO conserva una sola evidencia oficial y calcula relevancia por comuna, distancia y preferencias. Cambiar tu perfil recalcula las alertas sin modificar la fuente original.</p>
+          <p>ANTEMANO conserva una sola evidencia oficial y calcula relevancia por comuna, distancia y preferencias. Cambiar tu perfil recalcula las alertas y el costo de combustible sin modificar la fuente original.</p>
         </div>
         <span className="statusBadge healthy">PERFIL</span>
       </section>
