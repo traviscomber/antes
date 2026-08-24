@@ -12,50 +12,32 @@ async function fetchText(url) {
 
 const route = new URL('eventos-via-publica', BASE).toString();
 const { response, text } = await fetchText(route);
-console.log('AGUAS_DECIMA_EVENTS_PAGE', JSON.stringify({
-  status: response.status,
-  ok: response.ok,
-  finalUrl: response.url,
-  contentType: response.headers.get('content-type'),
-  length: text.length,
-  prefix: text.replace(/\s+/g, ' ').slice(0, 260),
-}));
+console.log('AGUAS_DECIMA_EVENTS_PAGE', JSON.stringify({ status: response.status, ok: response.ok, finalUrl: response.url, length: text.length }));
 
-const scripts = [...text.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)]
-  .map((match) => new URL(match[1], response.url).toString());
-console.log('AGUAS_DECIMA_EVENTS_SCRIPTS', JSON.stringify(scripts));
+const inlineScripts = [...text.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map((match) => match[1]);
+for (let index = 0; index < inlineScripts.length; index += 1) {
+  const js = inlineScripts[index];
+  if (!/eventosViaPublica|DataTable|ajax|eventoSeleccionado|guardarEvento/i.test(js)) continue;
+  console.log('AGUAS_DECIMA_INLINE_SCRIPT', JSON.stringify({ index, length: js.length, script: js.replace(/\s+/g, ' ').slice(0, 12000) }));
+}
 
-const tokens = ['evento', 'corte', 'suministro', 'interrup', 'programad', 'api/', '/api', 'fetch(', '$.get', '$.post', 'ajax', 'mapa', 'latitude', 'longitude', 'latitud', 'longitud'];
-for (const token of tokens) {
+const htmlNeedles = ['eventosViaPublica', 'DataTable', 'ajax:', 'sAjaxSource', 'fetch(', '/eventos', '/api/', 'eventoSeleccionado'];
+for (const needle of htmlNeedles) {
   let from = 0;
   let emitted = 0;
   while (emitted < 8) {
-    const index = text.toLowerCase().indexOf(token.toLowerCase(), from);
+    const index = text.toLowerCase().indexOf(needle.toLowerCase(), from);
     if (index < 0) break;
-    console.log('AGUAS_DECIMA_EVENTS_HINT', JSON.stringify({ token, index, snippet: text.slice(Math.max(0, index - 480), index + 1000).replace(/\s+/g, ' ') }));
-    from = index + token.length;
+    console.log('AGUAS_DECIMA_TABLE_HINT', JSON.stringify({ needle, index, snippet: text.slice(Math.max(0, index - 900), index + 2400).replace(/\s+/g, ' ') }));
+    from = index + needle.length;
     emitted += 1;
   }
 }
 
+const scripts = [...text.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)]
+  .map((match) => new URL(match[1], response.url).toString());
 for (const scriptUrl of scripts) {
-  try {
-    const { response: sr, text: js } = await fetchText(scriptUrl);
-    if (!sr.ok || js.length > 4_000_000) continue;
-    if (!/evento|corte|suministro|interrup|programad|api\/?|fetch\(|ajax|mapa|latitud|longitud/i.test(js)) continue;
-    console.log('AGUAS_DECIMA_EVENTS_SCRIPT', JSON.stringify({ url: scriptUrl, status: sr.status, length: js.length }));
-    for (const token of tokens) {
-      let from = 0;
-      let emitted = 0;
-      while (emitted < 8) {
-        const index = js.toLowerCase().indexOf(token.toLowerCase(), from);
-        if (index < 0) break;
-        console.log('AGUAS_DECIMA_EVENTS_SCRIPT_HINT', JSON.stringify({ script: scriptUrl.split('/').pop(), token, index, snippet: js.slice(Math.max(0, index - 500), index + 1100).replace(/\s+/g, ' ') }));
-        from = index + token.length;
-        emitted += 1;
-      }
-    }
-  } catch (error) {
-    console.log('AGUAS_DECIMA_EVENTS_SCRIPT_ERROR', JSON.stringify({ url: scriptUrl, error: String(error).slice(0, 180) }));
-  }
+  if (!/main\.js|evento|via-publica/i.test(scriptUrl)) continue;
+  const { response: sr, text: js } = await fetchText(scriptUrl);
+  console.log('AGUAS_DECIMA_TARGET_SCRIPT', JSON.stringify({ url: scriptUrl, status: sr.status, length: js.length, body: js.slice(0, 16000).replace(/\s+/g, ' ') }));
 }
