@@ -1,5 +1,6 @@
 import { neon } from "@neondatabase/serverless";
 import { requireSession } from "@/lib/auth/session";
+import { correlateAnticipations } from "@/lib/anticipation/correlation";
 import { PERSONAL_ALERT_RULE_VERSION } from "@/lib/profile/personal-alerts";
 
 const chileDateFormat = new Intl.DateTimeFormat("es-CL", {
@@ -23,6 +24,8 @@ type AnticipationRow = {
   commune: string | null;
   valid_from: string | Date;
   valid_until: string | Date | null;
+  observed_at: string | Date;
+  raw_evidence_ref: string;
   lead_minutes: number | string;
 };
 
@@ -45,6 +48,8 @@ export async function AnticipationPanel() {
        eo.commune,
        eo.valid_from,
        eo.valid_until,
+       eo.observed_at,
+       eo.raw_evidence_ref,
        greatest(floor(extract(epoch from (eo.valid_from - now())) / 60), 0)::int as lead_minutes
      from personal_alerts pa
      join external_observations eo on eo.id = pa.observation_id
@@ -55,11 +60,27 @@ export async function AnticipationPanel() {
        and eo.valid_from is not null
        and eo.valid_from > now()
      order by eo.valid_from asc, pa.updated_at desc
-     limit 3`,
+     limit 50`,
     [session.userId, PERSONAL_ALERT_RULE_VERSION],
   );
 
-  const anticipations = rows as AnticipationRow[];
+  const anticipations = (rows as AnticipationRow[]).map((row) => ({
+    id: row.id,
+    sourceId: row.source_id,
+    sourceName: row.source_name,
+    signalType: row.signal_type,
+    level: row.level,
+    reason: row.reason,
+    region: row.region,
+    commune: row.commune,
+    startsAt: new Date(row.valid_from).toISOString(),
+    endsAt: row.valid_until ? new Date(row.valid_until).toISOString() : null,
+    observedAt: new Date(row.observed_at).toISOString(),
+    leadMinutes: Number(row.lead_minutes),
+    evidenceRef: row.raw_evidence_ref,
+    distanceKm: row.distance_km,
+  }));
+  const correlated = correlateAnticipations(anticipations);
   if (anticipations.length === 0) return null;
 
   return (
@@ -70,36 +91,55 @@ export async function AnticipationPanel() {
             <p className="sectionLabel">ANTES QUE PASE</p>
             <h3 id="anticipations-title">Lo que viene para ti</h3>
           </div>
-          <p>Impactos futuros respaldados por una ventana oficial. El tiempo restante se calcula desde evidencia persistida, no desde una predicción sintética.</p>
+          <p>Primero mostramos convergencias entre fuentes independientes. Debajo quedan los impactos individuales con su ventana oficial.</p>
         </div>
 
-        <div className="sourceGrid">
-          {anticipations.map((item) => {
-            const leadMinutes = Number(item.lead_minutes);
-            return (
+        {correlated.length > 0 ? (
+          <div className="sourceGrid" style={{ marginBottom: 24 }}>
+            {correlated.slice(0, 3).map((item) => (
               <article className="sourceCard personalSignalCard" key={item.id}>
                 <div className="sourceCardTop">
                   <div>
-                    <p className="sourceAuthority">{item.source_name}</p>
-                    <h4>{anticipationLabel(item.signal_type)}</h4>
+                    <p className="sourceAuthority">CONVERGENCIA / {item.sourceCount} FUENTES</p>
+                    <h4>{item.title}</h4>
                   </div>
                   <span className={`statusBadge ${item.level === "critical" ? "unavailable" : "degraded"}`}>
-                    {formatLeadTime(leadMinutes)}
+                    {formatLeadTime(item.leadMinutes)}
                   </span>
                 </div>
-
                 <p className="sourceDescription">{item.reason}</p>
-
                 <dl className="sourceMeta">
-                  <div><dt>Comienza</dt><dd>{formatChileDate(item.valid_from)}</dd></div>
-                  <div><dt>Termina</dt><dd>{item.valid_until ? formatChileDate(item.valid_until) : "Sin hora informada"}</dd></div>
-                  <div><dt>Cercanía</dt><dd>{item.distance_km === null ? item.commune ?? item.region ?? "Regional" : `${Number(item.distance_km).toFixed(1)} km`}</dd></div>
+                  <div><dt>Ventana</dt><dd>{formatChileDate(item.startsAt)}</dd></div>
+                  <div><dt>Territorio</dt><dd>{item.commune ?? item.region ?? "Regional"}</dd></div>
+                  <div><dt>Evidencia</dt><dd>{item.signalCount} señales</dd></div>
                 </dl>
-
-                <p className="sourceMessage">{item.source_id} · ventana oficial · evidencia persistida</p>
+                <p className="sourceMessage">{item.evidence.map((e) => e.sourceName).join(" · ")} · evidencia independiente</p>
               </article>
-            );
-          })}
+            ))}
+          </div>
+        ) : null}
+
+        <div className="sourceGrid">
+          {anticipations.slice(0, 3).map((item) => (
+            <article className="sourceCard personalSignalCard" key={item.id}>
+              <div className="sourceCardTop">
+                <div>
+                  <p className="sourceAuthority">{item.sourceName}</p>
+                  <h4>{anticipationLabel(item.signalType)}</h4>
+                </div>
+                <span className={`statusBadge ${item.level === "critical" ? "unavailable" : "degraded"}`}>
+                  {formatLeadTime(item.leadMinutes)}
+                </span>
+              </div>
+              <p className="sourceDescription">{item.reason}</p>
+              <dl className="sourceMeta">
+                <div><dt>Comienza</dt><dd>{formatChileDate(item.startsAt)}</dd></div>
+                <div><dt>Termina</dt><dd>{item.endsAt ? formatChileDate(item.endsAt) : "Sin hora informada"}</dd></div>
+                <div><dt>Cercanía</dt><dd>{item.distanceKm === null ? item.commune ?? item.region ?? "Regional" : `${Number(item.distanceKm).toFixed(1)} km`}</dd></div>
+              </dl>
+              <p className="sourceMessage">{item.sourceId} · ventana oficial · evidencia persistida</p>
+            </article>
+          ))}
         </div>
       </section>
     </div>
