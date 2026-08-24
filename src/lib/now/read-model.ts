@@ -415,7 +415,7 @@ async function loadPersonalRows(
        from external_observations o
        left join signal_sources s on s.id = o.source_id
        where o.signal_type <> 'energy.fuel.station.retail_price'
-          or o.observed_at >= now() - interval '14 days'
+          or o.last_seen_at >= now() - interval '48 hours'
      ), relevant as (
        select *,
          case
