@@ -16,7 +16,7 @@ const LOOKBACK_MONTHS = 24;
 
 type JsonObject = Record<string, unknown>;
 
-interface CneGenerationRow extends JsonObject {
+export interface CneGenerationRow extends JsonObject {
   _id?: number;
   anio?: string;
   mes?: string;
@@ -33,7 +33,7 @@ interface CkanResult {
   records: CneGenerationRow[];
 }
 
-interface LatestPeriod {
+export interface LatestPeriod {
   year: number;
   month: number;
   total: number;
@@ -184,7 +184,7 @@ async function fetchCkan(input: {
 
   const total = typeof payload.result.total === "number" ? payload.result.total : 0;
   const records = Array.isArray(payload.result.records)
-    ? payload.result.records.filter(isObject) as CneGenerationRow[]
+    ? (payload.result.records.filter(isObject) as CneGenerationRow[])
     : [];
 
   return { total, records };
@@ -230,7 +230,9 @@ export function normalizeGenerationRows(
   const periodId = `${period.year}-${String(period.month).padStart(2, "0")}`;
   const validFrom = new Date(Date.UTC(period.year, period.month - 1, 1)).toISOString();
   const validUntil = new Date(Date.UTC(period.year, period.month, 1)).toISOString();
-  const observedAt = new Date(Date.UTC(period.year, period.month, 0, 23, 59, 59, 999)).toISOString();
+  const observedAt = new Date(
+    Date.UTC(period.year, period.month, 0, 23, 59, 59, 999),
+  ).toISOString();
   const evidenceUrl = new URL(DATASTORE_URL);
   evidenceUrl.searchParams.set("resource_id", RESOURCE_ID);
   evidenceUrl.searchParams.set(
@@ -296,7 +298,11 @@ function clean(value: unknown): string | undefined {
 function parseNumber(value: unknown): number | undefined {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value !== "string" || !value.trim()) return undefined;
-  const parsed = Number(value.replace(/\./g, "").replace(",", "."));
+  const text = value.trim();
+  const normalized = text.includes(",")
+    ? text.replace(/\./g, "").replace(",", ".")
+    : text;
+  const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
