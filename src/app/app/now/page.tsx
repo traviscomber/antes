@@ -26,6 +26,7 @@ export default async function NowPage() {
   const region = snapshot.profile?.homeRegion ?? "Chile";
   const alerts = [...snapshot.personalAlerts].sort(compareAlerts);
   const clusters = clusterAlerts(alerts);
+  const priorityCluster = clusters[0];
   const categories = (["infrastructure", "services", "territory", "context"] as AlertCategory[]).map((category) => ({ category, clusters: clusters.filter((cluster) => alertCategory(cluster.representative.signalType) === category) })).filter((group) => group.clusters.length > 0);
   const signals = snapshot.personalSignals.filter((signal) => signal.signalType !== "news.regional.context").sort(compareRelevantSignals);
   const serviceSignals = signals.filter((signal) => signalPriority(signal) === 2).slice(0, 2);
@@ -46,6 +47,7 @@ export default async function NowPage() {
       <div className={styles.layout}>
         <div className={styles.content}>
           <section className={alertStyles.alertSummary} aria-label="Resumen de alertas"><strong>{alerts.length} alertas activas</strong>{criticalCount > 0 && <span className={alertStyles.summaryCritical}>{criticalCount} críticas</span>}{warningCount > 0 && <span className={alertStyles.summaryWarning}>{warningCount} advertencias</span>}{watchCount > 0 && <span className={alertStyles.summaryWatch}>{watchCount} vigilancia</span>}</section>
+          {priorityCluster && <OperationalBrief cluster={priorityCluster} location={location} generatedAt={snapshot.generatedAt} />}
           <section className={alertStyles.alertPanel}>
             {categories.length ? categories.map(({ category, clusters }) => <AlertCategoryGroup key={category} category={category} clusters={clusters} />) : <div className={alertStyles.empty}>No hay alertas activas para tu ubicación.</div>}
           </section>
@@ -61,6 +63,39 @@ export default async function NowPage() {
     </main>
     <footer className={styles.footer}><div><span className={styles.footerMark}>△</span><strong>ANTEMANO</strong><small>Saber antes cambia lo que puedes hacer.</small></div><nav><Link href="/app/sources">Fuentes</Link><Link href="/app/map">Mapa</Link><Link href="/app/history">Historial</Link><Link href="/app/profile">Perfil</Link></nav><span>Hecho en Chile 🇨🇱</span></footer>
   </div>;
+}
+
+function OperationalBrief({ cluster, location, generatedAt }: { cluster: AlertCluster; location: string; generatedAt: string }) {
+  const alert = cluster.representative;
+  const severity = clusterSeverity(cluster.alerts);
+  const sourceUrl = officialSourceUrl(alert.sourceId);
+  const distance = nearestDistance(cluster.alerts);
+  const territory = distance === undefined
+    ? alert.commune ?? alert.region ?? location
+    : `${distance.toFixed(0)} km de ${location}`;
+  const isNew = Date.parse(generatedAt) - Date.parse(alert.firstSeenAt) <= 6 * 3_600_000;
+
+  return <section className={`${alertStyles.operationalBrief} ${alertStyles[`brief_${severity}`]}`} aria-labelledby="priority-alert-title">
+    <div className={alertStyles.briefLead}>
+      <span className={`${alertStyles.briefEyebrow} ${alertStyles[severity]}`}>{attentionLabel(severity)}</span>
+      <h2 id="priority-alert-title">{clusterTitle(cluster)}</h2>
+      <p>{clusterReason(cluster)}</p>
+      <div className={alertStyles.briefFacts}>
+        <span><b>DÓNDE</b>{territory}</span>
+        <span><b>VIGENTE DESDE</b>{relativeTime(alert.firstSeenAt, generatedAt)}</span>
+        <span><b>ÚLTIMA CONFIRMACIÓN</b>{relativeTime(alert.lastSeenAt, generatedAt)}</span>
+      </div>
+    </div>
+    <aside className={alertStyles.briefAction}>
+      {isNew && <span className={alertStyles.newBadge}>NUEVA</span>}
+      <strong>{actionLabel(severity)}</strong>
+      <p>{actionDescription(severity)}</p>
+      <div className={alertStyles.briefLinks}>
+        <Link href="/app/map">Ver en el mapa →</Link>
+        {sourceUrl ? <a href={sourceUrl} target="_blank" rel="noreferrer">Evidencia oficial ↗</a> : <Link href="/app/sources">Ver evidencia →</Link>}
+      </div>
+    </aside>
+  </section>;
 }
 
 function AlertCategoryGroup({ category, clusters }: { category: AlertCategory; clusters: AlertCluster[] }) {
@@ -99,7 +134,11 @@ function clusterAlerts(alerts: PersonalAlert[]): AlertCluster[] {
 
 function alertCategory(type: string): AlertCategory { const t = type.toLowerCase(); if (t.includes("road") || t.includes("infrastructure") || t.includes("mop")) return "infrastructure"; if (t.includes("outage") || t.includes("water.service") || t.includes("telecom")) return "services"; if (t.includes("marine") || t.includes("weather") || t.includes("wildfire") || t.includes("tsunami") || t.includes("hydro") || t.includes("scarcity")) return "territory"; return "context"; }
 function clusterSeverity(alerts: PersonalAlert[]): "critical" | "warning" | "watch" { if (alerts.some((a) => a.level === "critical")) return "critical"; if (alerts.some((a) => a.level === "warning")) return "warning"; return "watch"; }
-function severityLabel(level: "critical" | "warning" | "watch") { return level === "critical" ? "Crítica" : level === "warning" ? "Warning" : "Watch"; }
+function severityLabel(level: "critical" | "warning" | "watch") { return level === "critical" ? "Crítica" : level === "warning" ? "Advertencia" : "Vigilancia"; }
+function attentionLabel(level: "critical" | "warning" | "watch") { return level === "critical" ? "REQUIERE ATENCIÓN INMEDIATA" : level === "warning" ? "REQUIERE ATENCIÓN" : "EN VIGILANCIA"; }
+function actionLabel(level: "critical" | "warning" | "watch") { return level === "critical" ? "Revisar ahora" : level === "warning" ? "Mantener seguimiento" : "Monitorear"; }
+function actionDescription(level: "critical" | "warning" | "watch") { return level === "critical" ? "Existe evidencia vigente con prioridad crítica para tu perfil." : level === "warning" ? "La señal continúa activa y puede requerir preparación." : "La evidencia permanece activa, sin escalar su severidad."; }
+function relativeTime(value: string, reference: string) { const minutes = Math.max(0, Math.round((Date.parse(reference) - Date.parse(value)) / 60_000)); if (minutes < 1) return "ahora"; if (minutes < 60) return `hace ${minutes} min`; const hours = Math.floor(minutes / 60); if (hours < 24) return `hace ${hours} h`; const days = Math.floor(hours / 24); return `hace ${days} ${days === 1 ? "día" : "días"}`; }
 function nearestDistance(alerts: PersonalAlert[]) { const distances = alerts.map((a) => a.distanceKm).filter((d): d is number => typeof d === "number"); return distances.length ? Math.min(...distances) : undefined; }
 function clusterTitle(cluster: AlertCluster) { const a = cluster.representative; if (cluster.alerts.length > 1 && (a.sourceId.includes("directemar") || a.signalType.includes("marine"))) return "Temporal marítimo"; return alertLabel(a.signalType); }
 function clusterReason(cluster: AlertCluster) { if (cluster.alerts.length > 1 && cluster.representative.sourceId.includes("directemar")) return `${cluster.alerts.length} avisos oficiales vigentes para tramos costeros que incluyen tu región.`; return localizeValue(cluster.representative.reason); }

@@ -56,6 +56,7 @@ export interface PersonalAlert {
   sourceName: string;
   signalType: string;
   observedAt: string;
+  firstSeenAt: string;
   lastSeenAt: string;
   region?: string;
   commune?: string;
@@ -159,6 +160,7 @@ type PersonalAlertRow = {
   source_name: string;
   signal_type: string;
   observed_at: string | Date;
+  first_seen_at: string | Date;
   last_seen_at: string | Date;
   region: string | null;
   commune: string | null;
@@ -335,6 +337,7 @@ async function loadPersonalAlertRows(
        coalesce(ss.name, pa.source_id) as source_name,
        pa.signal_type,
        eo.observed_at,
+       pa.first_seen_at,
        pa.last_seen_at,
        eo.region,
        eo.commune,
@@ -527,6 +530,7 @@ function mapPersonalAlert(row: PersonalAlertRow): PersonalAlert {
     sourceName: row.source_name,
     signalType: row.signal_type,
     observedAt: toIso(row.observed_at),
+    firstSeenAt: toIso(row.first_seen_at),
     lastSeenAt: toIso(row.last_seen_at),
     region: row.region ?? undefined,
     commune: row.commune ?? undefined,
