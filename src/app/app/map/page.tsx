@@ -52,4 +52,4 @@ function Metric({ value, label, detail, tone }: { value: number; label: string; 
   return <div className={`${styles.metric} ${toneClass}`}><strong>{value}</strong><span>{label}</span><small>{detail}</small></div>;
 }
 
-function AppNav() { return <header className={navStyles.topNav}><Link href="/app/now" className={navStyles.brand}>△ ANTEMANO</Link><nav className={navStyles.nav}><Link href="/app/now">AHORA</Link><Link href="/app/sources">FUENTES</Link><Link href="/app/graph">GRAFO</Link><Link href="/app/map" aria-current="page">MAPA</Link><Link href="/app/history">HISTORIAL</Link></nav><Link href="/app/profile">PERFIL</Link></header>; }
+function AppNav() { return <header className={navStyles.topNav}><Link href="/app/map" className={navStyles.brand}>△ ANTEMANO</Link><nav className={navStyles.nav}><Link href="/app/now">AHORA</Link><Link href="/app/sources">FUENTES</Link><Link href="/app/graph">GRAFO</Link><Link href="/app/map" aria-current="page">MAPA</Link><Link href="/app/history">HISTORIAL</Link></nav><Link href="/app/profile">PERFIL</Link></header>; }
