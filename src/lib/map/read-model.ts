@@ -12,6 +12,10 @@ export type MapPoint = {
   signalType: string;
   severity?: string;
   observedAt: string;
+  lastSeenAt: string;
+  validFrom?: string;
+  validUntil?: string;
+  qualityState?: string;
   latitude: number;
   longitude: number;
   distanceKm: number;
@@ -22,7 +26,7 @@ export type MapPoint = {
 
 type Row = {
   id: string; source_id: string; source_name: string; canonical_url: string | null; source_url: string | null;
-  signal_type: string; severity: string | null; observed_at: string | Date; latitude: number; longitude: number;
+  signal_type: string; severity: string | null; observed_at: string | Date; last_seen_at: string | Date; valid_from: string | Date | null; valid_until: string | Date | null; quality_state: string | null; latitude: number; longitude: number;
   region: string | null; commune: string | null; value_numeric: number | null; value_text: string | null; value_boolean: boolean | null; unit: string | null; distance_km: number | string;
 };
 
@@ -34,13 +38,28 @@ export async function getMapPoints(latitude: number, longitude: number): Promise
     with candidates as (
       select o.id, o.source_id, o.source_record_id,
         coalesce(s.name,o.source_id) source_name, s.canonical_url, o.source_url,
-        o.signal_type, o.severity, o.observed_at, o.latitude, o.longitude, o.region, o.commune,
+        o.signal_type, o.severity, o.observed_at, o.last_seen_at, o.valid_from, o.valid_until, o.quality_state, o.latitude, o.longitude, o.region, o.commune,
         o.value_numeric, o.value_text, o.value_boolean, o.unit,
         111.195 * sqrt(power(o.latitude-$1,2)+power((o.longitude-$2)*cos(radians($1)),2)) as distance_km
       from external_observations o
       left join signal_sources s on s.id=o.source_id
       where o.latitude is not null and o.longitude is not null
-        and (o.valid_until is null or o.valid_until >= now() - interval '24 hours')
+        and (
+          o.source_id <> 'cl.saesa.power-outages'
+          or (
+            o.last_seen_at >= now() - interval '20 minutes'
+            and (
+              o.signal_type <> 'energy.power.outage.scheduled'
+              or o.valid_until is null
+              or o.valid_until >= now()
+            )
+          )
+        )
+        and (
+          o.source_id = 'cl.saesa.power-outages'
+          or o.valid_until is null
+          or o.valid_until >= now() - interval '24 hours'
+        )
         and o.observed_at >= now() - interval '14 days'
     ), latest as (
       select distinct on (source_id, coalesce(source_record_id,id)) *
@@ -58,7 +77,7 @@ export async function getMapPoints(latitude: number, longitude: number): Promise
       from latest
     )
     select id, source_id, source_name, canonical_url, source_url,
-      signal_type, severity, observed_at, latitude, longitude, region, commune,
+      signal_type, severity, observed_at, last_seen_at, valid_from, valid_until, quality_state, latitude, longitude, region, commune,
       value_numeric, value_text, value_boolean, unit, distance_km
     from balanced
     where source_rank <= 100
@@ -78,6 +97,10 @@ export async function getMapPoints(latitude: number, longitude: number): Promise
     signalType: row.signal_type,
     severity: row.severity ?? undefined,
     observedAt: new Date(row.observed_at).toISOString(),
+    lastSeenAt: new Date(row.last_seen_at).toISOString(),
+    validFrom: row.valid_from ? new Date(row.valid_from).toISOString() : undefined,
+    validUntil: row.valid_until ? new Date(row.valid_until).toISOString() : undefined,
+    qualityState: row.quality_state ?? undefined,
     latitude: Number(row.latitude), longitude: Number(row.longitude), distanceKm: Number(row.distance_km),
     region: row.region ?? undefined, commune: row.commune ?? undefined,
     value: formatValue(row),
@@ -96,6 +119,13 @@ export function layerFor(type: string): MapLayer {
   if (t.includes("earthquake") || t.includes("seismic")) return "seismic";
   if (t.includes("weather") || t.includes("meteor")) return "weather";
   return "alerts";
+}
+
+export function powerStateFor(type: string): "current" | "scheduled" | undefined {
+  const normalized = type.toLowerCase();
+  if (normalized.includes("outage") && normalized.includes("scheduled")) return "scheduled";
+  if (normalized.includes("outage")) return "current";
+  return undefined;
 }
 function titleFor(type: string) {
   const t = type.toLowerCase();
