@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     const token = await createSession(identity);
     await setSessionCookie(token);
 
-    return NextResponse.redirect(new URL("/app/now", request.url), 303);
+    return NextResponse.redirect(new URL("/app/map", request.url), 303);
   } catch (error) {
     console.error("[auth] login unavailable", {
       databaseUrlConfigured: Boolean(process.env.DATABASE_URL),
