@@ -22,6 +22,16 @@ const SOURCE: CountrySignalSource = {
 const ORIGIN = "https://www.sismologia.cl";
 const USER_AGENT = "N3uralia-ANTEMANO/0.1 (+https://www.antemano.app)";
 const MAX_EVENTS_PER_DAY = 500;
+const CURRENT_DAY_PUBLICATION_GRACE_UTC_HOURS = 3;
+
+class CatalogHttpError extends Error {
+  constructor(
+    readonly day: string,
+    readonly status: number,
+  ) {
+    super(`CSN daily catalog ${day} failed with HTTP ${status}.`);
+  }
+}
 
 type CatalogEvent = {
   eventId?: string;
@@ -155,9 +165,19 @@ export function normalizeCsnEvents(
   });
 }
 
-async function fetchRecentCatalogEvents(now: Date): Promise<CatalogEvent[]> {
+export async function fetchRecentCatalogEvents(now: Date): Promise<CatalogEvent[]> {
   const days = [utcDate(now), utcDate(new Date(now.getTime() - 86_400_000))];
-  const batches = await Promise.all(days.map(fetchCatalogDay));
+  const [current, previous] = await Promise.allSettled(days.map(fetchCatalogDay));
+  if (previous.status === "rejected") throw previous.reason;
+
+  let batches: CatalogEvent[][];
+  if (current.status === "fulfilled") {
+    batches = [current.value, previous.value];
+  } else if (isCurrentCatalogAwaitingPublication(current.reason, now, days[0])) {
+    batches = [previous.value];
+  } else {
+    throw current.reason;
+  }
   const unique = new Map<string, CatalogEvent>();
   for (const batch of batches) {
     for (const event of batch) {
@@ -168,6 +188,13 @@ async function fetchRecentCatalogEvents(now: Date): Promise<CatalogEvent[]> {
     }
   }
   return [...unique.values()].sort((left, right) => left.utcTime.localeCompare(right.utcTime));
+}
+
+function isCurrentCatalogAwaitingPublication(error: unknown, now: Date, currentDay: string): boolean {
+  return error instanceof CatalogHttpError
+    && error.day === currentDay
+    && (error.status === 403 || error.status === 404)
+    && now.getUTCHours() < CURRENT_DAY_PUBLICATION_GRACE_UTC_HOURS;
 }
 
 async function fetchCatalogDay(day: string): Promise<CatalogEvent[]> {
@@ -181,7 +208,7 @@ async function fetchCatalogDay(day: string): Promise<CatalogEvent[]> {
     signal: AbortSignal.timeout(20_000),
   });
   if (!response.ok) {
-    throw new Error(`CSN daily catalog ${day} failed with HTTP ${response.status}.`);
+    throw new CatalogHttpError(day, response.status);
   }
   const html = await response.text();
   const events = parseCatalogHtml(html, catalogUrl);
