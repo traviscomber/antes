@@ -4,43 +4,52 @@ import "leaflet/dist/leaflet.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Map as LeafletMap, LayerGroup } from "leaflet";
 import { powerStateFor, type MapLayer, type MapPoint } from "@/lib/map/read-model";
+import { clusterMapPoints } from "@/lib/map/clusters";
 import type { PersonalAlert } from "@/lib/now/read-model";
 import styles from "./map.module.css";
 import filterStyles from "./map-filters.module.css";
 
-const categoryMeta = {
-  alerts: { label: "Alertas", icon: "!", layers: ["alerts"] as MapLayer[] },
-  infrastructure: { label: "Infraestructura", icon: "▥", layers: ["roads"] as MapLayer[] },
-  power: { label: "Electricidad", icon: "ϟ", layers: ["power"] as MapLayer[] },
-  water: { label: "Caudales y agua", icon: "≋", layers: ["water"] as MapLayer[] },
-  fuel: { label: "Combustible", icon: "◇", layers: ["fuel"] as MapLayer[] },
-  weather: { label: "Meteorología", icon: "◔", layers: ["weather"] as MapLayer[] },
-  fires: { label: "Incendios", icon: "▲", layers: ["fires"] as MapLayer[] },
-  air: { label: "Calidad del aire", icon: "◌", layers: ["air"] as MapLayer[] },
-  seismic: { label: "Sismos", icon: "◉", layers: ["seismic"] as MapLayer[] },
-  coastal: { label: "Costa", icon: "≈", layers: ["coastal"] as MapLayer[] },
+const layerMeta: Record<MapLayer, { label: string; shortLabel: string; icon: string }> = {
+  alerts: { label: "Alertas", shortLabel: "Alertas", icon: "!" },
+  roads: { label: "Infraestructura", shortLabel: "Infraestructura", icon: "▥" },
+  power: { label: "Electricidad", shortLabel: "Electricidad", icon: "ϟ" },
+  water: { label: "Caudales y agua", shortLabel: "Agua", icon: "≋" },
+  fuel: { label: "Combustible", shortLabel: "Combustible", icon: "◇" },
+  weather: { label: "Meteorología", shortLabel: "Meteorología", icon: "◔" },
+  fires: { label: "Incendios", shortLabel: "Incendios", icon: "▲" },
+  air: { label: "Calidad del aire", shortLabel: "Aire", icon: "◌" },
+  seismic: { label: "Sismos", shortLabel: "Sismos", icon: "◉" },
+  coastal: { label: "Costa", shortLabel: "Costa", icon: "≈" },
+};
+
+const viewMeta = {
+  relevant: { label: "Relevante", detail: "prioridad operativa", layers: ["alerts", "roads", "power", "water", "fires", "weather"] as MapLayer[] },
+  services: { label: "Servicios", detail: "suministros y cortes", layers: ["power", "water", "fuel"] as MapLayer[] },
+  territory: { label: "Territorio", detail: "amenazas y ambiente", layers: ["roads", "water", "fires", "weather", "air", "coastal"] as MapLayer[] },
+  context: { label: "Contexto", detail: "referencias territoriales", layers: ["fuel", "air", "seismic", "coastal"] as MapLayer[] },
 } as const;
 
-type Category = keyof typeof categoryMeta;
+type ViewMode = keyof typeof viewMeta;
 type PowerMode = "current" | "scheduled" | "all";
-const allCategories = Object.keys(categoryMeta) as Category[];
-const defaultActive: Category[] = allCategories;
+const viewModes = Object.keys(viewMeta) as ViewMode[];
 
 export default function MapCanvas({ latitude, longitude, points, alerts, location }: { latitude: number; longitude: number; points: MapPoint[]; alerts: PersonalAlert[]; location: string }) {
-  const [active, setActive] = useState<Set<Category>>(() => new Set(defaultActive));
+  const [viewMode, setViewMode] = useState<ViewMode>("relevant");
+  const [activeLayers, setActiveLayers] = useState<Set<MapLayer>>(() => new Set(viewMeta.relevant.layers));
   const [powerMode, setPowerMode] = useState<PowerMode>("current");
+  const [zoom, setZoom] = useState(9);
   const [selected, setSelected] = useState<MapPoint | null>(null);
   const mapNodeRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const markerLayerRef = useRef<LayerGroup | null>(null);
   const didFitRef = useRef(false);
 
-  const enabledLayers = useMemo(() => new Set([...active].flatMap((category) => categoryMeta[category].layers)), [active]);
   const visible = useMemo(() => points.filter((point) => {
-    if (!enabledLayers.has(point.layer)) return false;
+    if (!activeLayers.has(point.layer)) return false;
     if (point.layer !== "power" || powerMode === "all") return true;
     return powerStateFor(point.signalType) === powerMode;
-  }), [points, enabledLayers, powerMode]);
+  }), [points, activeLayers, powerMode]);
+  const markerItems = useMemo(() => clusterMapPoints(visible, zoom), [visible, zoom]);
   const powerCounts = useMemo(() => {
     let current = 0;
     let scheduled = 0;
@@ -51,14 +60,22 @@ export default function MapCanvas({ latitude, longitude, points, alerts, locatio
     }
     return { current, scheduled, all: current + scheduled };
   }, [points]);
-  const categoryCounts = useMemo(() => {
-    const counts = new Map<Category, number>(allCategories.map((category) => [category, 0]));
+  const layerCounts = useMemo(() => {
+    const counts = new Map<MapLayer, number>();
     for (const point of points) {
-      const category = allCategories.find((candidate) => categoryMeta[candidate].layers.includes(point.layer));
-      if (category) counts.set(category, (counts.get(category) ?? 0) + 1);
+      counts.set(point.layer, (counts.get(point.layer) ?? 0) + 1);
     }
     return counts;
   }, [points]);
+  const viewCounts = useMemo(() => {
+    const counts = new Map<ViewMode, number>();
+    for (const mode of viewModes) {
+      const layers = new Set<MapLayer>(viewMeta[mode].layers);
+      counts.set(mode, points.filter((point) => layers.has(point.layer) && (point.layer !== "power" || powerMode === "all" || powerStateFor(point.signalType) === powerMode)).length);
+    }
+    return counts;
+  }, [points, powerMode]);
+  const summary = useMemo(() => operationalSummary(visible), [visible]);
   const alertGroups = groupAlerts(alerts);
 
   useEffect(() => {
@@ -81,6 +98,7 @@ export default function MapCanvas({ latitude, longitude, points, alerts, locatio
       }).addTo(map);
 
       markerLayerRef.current = L.layerGroup().addTo(map);
+      map.on("zoomend", () => setZoom(map.getZoom()));
       mapRef.current = map;
       requestAnimationFrame(() => map.invalidateSize());
     }
@@ -112,7 +130,19 @@ export default function MapCanvas({ latitude, longitude, points, alerts, locatio
       });
       L.marker([latitude, longitude], { icon: homeIcon, zIndexOffset: 2000, keyboard: true, title: "Tu ubicación" }).addTo(layer);
 
-      for (const point of visible) {
+      for (const item of markerItems) {
+        if (item.kind === "cluster") {
+          const icon = L.divIcon({
+            className: "",
+            html: `<span class="${styles.leafletMarker} ${styles[`marker_${item.layer}`]} ${filterStyles.clusterMarker}"><b>${item.count}</b><small>${layerMeta[item.layer].icon}</small></span>`,
+            iconSize: [38, 38],
+            iconAnchor: [19, 19],
+          });
+          const marker = L.marker([item.latitude, item.longitude], { icon, keyboard: true, title: `${item.count} señales de ${layerMeta[item.layer].label}` }).addTo(layer);
+          marker.on("click", () => map.setView([item.latitude, item.longitude], Math.min(map.getZoom() + 2, 14)));
+          continue;
+        }
+        const point = item.point;
         const icon = L.divIcon({
           className: "",
           html: `<span class="${styles.leafletMarker} ${styles[`marker_${point.layer}`]} ${point.layer === "power" ? powerMarkerClass(point) : ""}">${markerIcon(point)}</span>`,
@@ -128,7 +158,7 @@ export default function MapCanvas({ latitude, longitude, points, alerts, locatio
       }
 
       if (!didFitRef.current) {
-        const initialPoints = points.filter((point) => point.distanceKm <= 85 && point.layer !== "seismic" && point.layer !== "coastal");
+        const initialPoints = visible.filter((point) => point.distanceKm <= 85 && point.layer !== "seismic" && point.layer !== "coastal");
         const latLngs: [number, number][] = [[latitude, longitude], ...initialPoints.map((point) => [point.latitude, point.longitude] as [number, number])];
         if (latLngs.length > 1) map.fitBounds(L.latLngBounds(latLngs), { padding: [34, 34], maxZoom: 10 });
         didFitRef.current = true;
@@ -137,7 +167,7 @@ export default function MapCanvas({ latitude, longitude, points, alerts, locatio
 
     void syncMarkers();
     return () => { cancelled = true; };
-  }, [latitude, longitude, points, visible]);
+  }, [latitude, longitude, markerItems, visible]);
 
   useEffect(() => () => {
     mapRef.current?.remove();
@@ -145,31 +175,39 @@ export default function MapCanvas({ latitude, longitude, points, alerts, locatio
     markerLayerRef.current = null;
   }, []);
 
-  function toggle(category: Category) {
-    setActive((current) => {
-      const next = new Set(current);
-      if (next.has(category)) next.delete(category); else next.add(category);
-      return next;
-    });
+  function selectView(mode: ViewMode) {
+    setViewMode(mode);
+    setActiveLayers(new Set(viewMeta[mode].layers));
+    setSelected(null);
   }
 
-  function toggleAll() {
-    setActive((current) => current.size === allCategories.length ? new Set() : new Set(allCategories));
+  function toggleLayer(layer: MapLayer) {
+    setActiveLayers((current) => {
+      const next = new Set(current);
+      if (next.has(layer)) next.delete(layer); else next.add(layer);
+      return next;
+    });
   }
 
   return <div className={styles.workspace}>
     <div className={styles.mainColumn}>
       <div className={styles.filterBar}>
-        <button type="button" onClick={toggleAll} aria-pressed={active.size === allCategories.length} className={`${styles.filter} ${filterStyles.control} ${active.size === allCategories.length ? filterStyles.active : filterStyles.inactive}`}><span className={filterStyles.state}>{active.size === allCategories.length ? "●" : "○"}</span><span>▱</span>Todas<strong>{points.length}</strong></button>
-        {allCategories.map((category) => {
-          const meta = categoryMeta[category];
-          const count = categoryCounts.get(category) ?? 0;
-          const isActive = active.has(category);
-          return <button key={category} type="button" onClick={() => toggle(category)} aria-pressed={isActive} className={`${styles.filter} ${filterStyles.control} ${isActive ? filterStyles.active : filterStyles.inactive} ${count === 0 ? filterStyles.empty : ""}`}><span className={filterStyles.state}>{isActive ? "●" : "○"}</span><span>{meta.icon}</span>{meta.label}<strong>{count}</strong></button>;
+        {viewModes.map((mode) => {
+          const meta = viewMeta[mode];
+          const selectedView = viewMode === mode;
+          return <button key={mode} type="button" onClick={() => selectView(mode)} aria-pressed={selectedView} className={`${filterStyles.viewControl} ${selectedView ? filterStyles.viewActive : ""}`}><span>{meta.label}<small>{meta.detail}</small></span><strong>{viewCounts.get(mode) ?? 0}</strong></button>;
         })}
       </div>
 
-      {active.has("power") && powerCounts.all > 0 ? <div className={filterStyles.powerBar} aria-label="Tipo de evento eléctrico">
+      <div className={filterStyles.layerRail} aria-label={`Capas de ${viewMeta[viewMode].label}`}><span>CAPAS</span>{viewMeta[viewMode].layers.map((layer) => {
+        const enabled = activeLayers.has(layer);
+        const count = layerCounts.get(layer) ?? 0;
+        return <button key={layer} type="button" aria-pressed={enabled} onClick={() => toggleLayer(layer)} className={enabled ? filterStyles.layerActive : filterStyles.layerButton}><i>{layerMeta[layer].icon}</i>{layerMeta[layer].shortLabel}<strong>{count}</strong></button>;
+      })}</div>
+
+      <div className={filterStyles.operationalSummary}><span><b>{summary.primary}</b>{summary.secondary}</span><small>{markerItems.length} elementos dibujados · {visible.length} señales</small></div>
+
+      {activeLayers.has("power") && powerCounts.all > 0 ? <div className={filterStyles.powerBar} aria-label="Tipo de evento eléctrico">
         <span><b>Electricidad</b> · visualización</span>
         <div className={filterStyles.powerModes}>
           <PowerModeButton mode="current" activeMode={powerMode} count={powerCounts.current} onSelect={setPowerMode}>En curso</PowerModeButton>
@@ -204,6 +242,21 @@ export default function MapCanvas({ latitude, longitude, points, alerts, locatio
 function PowerModeButton({ mode, activeMode, count, onSelect, children }: { mode: PowerMode; activeMode: PowerMode; count: number; onSelect: (mode: PowerMode) => void; children: React.ReactNode }) {
   const selected = mode === activeMode;
   return <button type="button" aria-pressed={selected} className={selected ? filterStyles.powerModeActive : filterStyles.powerMode} onClick={() => onSelect(mode)}>{children}<strong>{count}</strong></button>;
+}
+
+function operationalSummary(points: MapPoint[]): { primary: string; secondary: string } {
+  if (points.length === 0) return { primary: "Sin señales visibles", secondary: " · activa una capa para explorar" };
+  let power = 0;
+  let urgent = 0;
+  let nearest = Number.POSITIVE_INFINITY;
+  for (const point of points) {
+    if (point.layer === "power") power += 1;
+    if (point.severity === "critical" || point.severity === "high") urgent += 1;
+    nearest = Math.min(nearest, point.distanceKm);
+  }
+  const primary = power > 0 ? `${power} ${power === 1 ? "evento eléctrico" : "eventos eléctricos"}` : `${points.length} señales visibles`;
+  const urgentText = urgent > 0 ? ` · ${urgent} de prioridad alta` : "";
+  return { primary, secondary: `${urgentText} · la más cercana a ${Math.max(1, Math.round(nearest))} km` };
 }
 
 function AlertRow({ alert }: { alert: PersonalAlert }) {
