@@ -84,7 +84,7 @@ export async function getMapPoints(latitude: number, longitude: number): Promise
   }));
 }
 
-function layerFor(type: string): MapLayer {
+export function layerFor(type: string): MapLayer {
   const t = type.toLowerCase();
   if (t.includes("outage") || t.includes("power")) return "power";
   if (t.includes("road") || t.includes("infrastructure") || t.includes("border")) return "roads";
