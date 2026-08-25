@@ -32,6 +32,7 @@ const viewMeta = {
 type ViewMode = keyof typeof viewMeta;
 type PowerMode = "current" | "scheduled" | "all";
 const viewModes = Object.keys(viewMeta) as ViewMode[];
+const allLayers = Object.keys(layerMeta) as MapLayer[];
 
 export default function MapCanvas({ latitude, longitude, points, alerts, location }: { latitude: number; longitude: number; points: MapPoint[]; alerts: PersonalAlert[]; location: string }) {
   const [viewMode, setViewMode] = useState<ViewMode>("relevant");
@@ -199,7 +200,7 @@ export default function MapCanvas({ latitude, longitude, points, alerts, locatio
         })}
       </div>
 
-      <div className={filterStyles.layerRail} aria-label={`Capas de ${viewMeta[viewMode].label}`}><span>CAPAS</span>{viewMeta[viewMode].layers.map((layer) => {
+      <div className={filterStyles.layerRail} aria-label="Todas las capas disponibles"><span>TODAS LAS CAPAS</span>{allLayers.map((layer) => {
         const enabled = activeLayers.has(layer);
         const count = layerCounts.get(layer) ?? 0;
         return <button key={layer} type="button" aria-pressed={enabled} onClick={() => toggleLayer(layer)} className={enabled ? filterStyles.layerActive : filterStyles.layerButton}><i>{layerMeta[layer].icon}</i>{layerMeta[layer].shortLabel}<strong>{count}</strong></button>;
