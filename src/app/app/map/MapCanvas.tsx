@@ -260,7 +260,8 @@ export default function MapCanvas({ latitude, longitude, points, alerts, locatio
       <div className={filterStyles.layerRail} role="group" aria-label="Todas las capas disponibles"><span>TODAS LAS CAPAS</span>{allLayers.map((layer) => {
         const enabled = activeLayers.has(layer);
         const count = layerCounts.get(layer) ?? 0;
-        return <button key={layer} type="button" aria-label={`${layerMeta[layer].label}: ${count} señales, ${enabled ? "activa" : "inactiva"}`} aria-pressed={enabled} onClick={() => toggleLayer(layer)} className={enabled ? filterStyles.layerActive : filterStyles.layerButton}><i aria-hidden="true">{layerMeta[layer].icon}</i>{layerMeta[layer].shortLabel}<strong>{count}</strong></button>;
+        const countLabel = count > 0 ? `${count} señales` : emptyLayerLabel(layer);
+        return <button key={layer} type="button" aria-label={`${layerMeta[layer].label}: ${countLabel.toLowerCase()}, ${enabled ? "activa" : "inactiva"}`} aria-pressed={enabled} onClick={() => toggleLayer(layer)} className={enabled ? filterStyles.layerActive : filterStyles.layerButton}><i aria-hidden="true">{layerMeta[layer].icon}</i>{layerMeta[layer].shortLabel}<strong>{count > 0 ? count : countLabel}</strong></button>;
       })}</div>
 
       <div className={filterStyles.operationalSummary}><span><b>{summary.primary}</b>{summary.secondary}</span><small>{markerItems.length} elementos dibujados · {visible.length} señales</small></div>
@@ -356,4 +357,5 @@ function powerMarkerClass(point:MapPoint){return powerStateFor(point.signalType)
 function pointKindLabel(point:MapPoint){const powerState=powerStateFor(point.signalType);if(powerState==="scheduled")return "Corte programado";if(powerState==="current")return point.qualityState==="provisional"?"Corte reportado · por confirmar":"Corte en curso";return layerLabel(point.layer);}
 function powerTiming(point:MapPoint){const date=powerStateFor(point.signalType)==="scheduled"&&point.validFrom?point.validFrom:point.lastSeenAt;return `${powerStateFor(point.signalType)==="scheduled"?"Inicio":"Visto"} ${new Intl.DateTimeFormat("es-CL",{dateStyle:"short",timeStyle:"short"}).format(new Date(date))}`;}
 function layerLabel(layer:MapLayer){return ({alerts:"Alertas",power:"Electricidad",roads:"Infraestructura",air:"Aire",fuel:"Combustible",water:"Agua",coastal:"Costa",fires:"Incendios",seismic:"Sismos",weather:"Meteorología"} as Record<MapLayer,string>)[layer];}
+function emptyLayerLabel(layer:MapLayer){return layer==="fuel"||layer==="air"||layer==="seismic"?"Sin señales":"Sin alertas";}
 function localizeValue(value:string){return value.replace(/(\d+)\s+affected_customers/gi,"$1 clientes afectados").replace(/affected customers/gi,"clientes afectados").replace(/customers affected/gi,"clientes afectados");}
