@@ -35,8 +35,8 @@ describe("login throttling persistence", () => {
       .resolves.toBe(true);
 
     expect(queryMock).toHaveBeenCalledWith(
-      expect.stringContaining("client_key = $2"),
-      ["new-address@example.com", "opaque-client", 15],
+      expect.stringContaining("email_key = $2"),
+      ["new-address@example.com", "client-key:opaque-client", 15],
     );
   });
 
@@ -58,7 +58,7 @@ describe("login throttling persistence", () => {
 
     expect(queryMock).toHaveBeenCalledWith(
       expect.stringMatching(/delete from auth_login_attempts[\s\S]*insert into auth_login_attempts/),
-      ["attempt@example.com", "opaque-client", 15, 5_000, 40, 8],
+      ["attempt@example.com", "client-key:opaque-client", 15, 5_000, 40, 8],
     );
   });
 });

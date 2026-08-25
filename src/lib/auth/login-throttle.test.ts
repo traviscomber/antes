@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { loginClientKey, normalizeLoginEmail } from "./login-throttle";
+import {
+  isPlausibleLoginEmail,
+  loginClientKey,
+  normalizeLoginEmail,
+} from "./login-throttle";
 
 describe("login throttle identity", () => {
   it("normalizes login emails consistently", () => {
     expect(normalizeLoginEmail("  Juan@Example.COM ")).toBe("juan@example.com");
+    expect(isPlausibleLoginEmail("juan@example.com")).toBe(true);
+    expect(isPlausibleLoginEmail("client-key-without-domain")).toBe(false);
+    expect(isPlausibleLoginEmail("two@@example.com")).toBe(false);
   });
 
   it("creates a stable opaque key from the Vercel client address", () => {

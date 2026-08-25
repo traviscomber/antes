@@ -121,6 +121,7 @@ export async function isLoginThrottled(
   clientKey: string | null,
 ): Promise<boolean> {
   const emailKey = normalizeEmail(email);
+  const clientMarker = loginClientMarker(clientKey);
   if (!emailKey) return false;
 
   const rows = await db().query<{
@@ -130,11 +131,11 @@ export async function isLoginThrottled(
   }>(
     `select
        count(*) filter (where email_key = $1)::int as email_attempts,
-       count(*) filter (where $2::text is not null and client_key = $2)::int as client_attempts,
-       count(*)::int as global_attempts
+       count(*) filter (where $2::text is not null and email_key = $2)::int as client_attempts,
+       count(*) filter (where position('@' in email_key) > 0)::int as global_attempts
        from auth_login_attempts
       where attempted_at > now() - make_interval(mins => $3)`,
-    [emailKey, clientKey, LOGIN_WINDOW_MINUTES],
+    [emailKey, clientMarker, LOGIN_WINDOW_MINUTES],
   );
 
   const row = rows[0];
@@ -148,6 +149,7 @@ export async function recordFailedLogin(
   clientKey: string | null,
 ): Promise<void> {
   const emailKey = normalizeEmail(email);
+  const clientMarker = loginClientMarker(clientKey);
   if (!emailKey) return;
 
   await db().query(
@@ -157,27 +159,36 @@ export async function recordFailedLogin(
      ), capacity as (
        select
          (select count(*) from auth_login_attempts
-           where attempted_at > now() - make_interval(mins => $3)) < $4
+           where position('@' in email_key) > 0
+             and attempted_at > now() - make_interval(mins => $3)) < $4
          and ($2::text is null or
            (select count(*) from auth_login_attempts
-             where client_key = $2
+             where email_key = $2
                and attempted_at > now() - make_interval(mins => $3)) < $5)
          and (select count(*) from auth_login_attempts
                where email_key = $1
                  and attempted_at > now() - make_interval(mins => $3)) < $6
          as may_insert
      )
-     insert into auth_login_attempts (email_key, client_key)
-     select $1, $2 from capacity where may_insert`,
+     insert into auth_login_attempts (email_key)
+     select entry.email_key
+       from capacity
+       cross join lateral (values ($1::text), ($2::text)) as entry(email_key)
+      where may_insert
+        and entry.email_key is not null`,
     [
       emailKey,
-      clientKey,
+      clientMarker,
       LOGIN_WINDOW_MINUTES,
       MAX_GLOBAL_FAILED_ATTEMPTS,
       MAX_CLIENT_FAILED_ATTEMPTS,
       MAX_EMAIL_FAILED_ATTEMPTS,
     ],
   );
+}
+
+function loginClientMarker(clientKey: string | null): string | null {
+  return clientKey ? `client-key:${clientKey}` : null;
 }
 
 export async function clearLoginFailures(email: string): Promise<void> {

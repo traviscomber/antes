@@ -10,6 +10,16 @@ export function normalizeLoginEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
+export function isPlausibleLoginEmail(email: string): boolean {
+  const normalized = normalizeLoginEmail(email);
+  const at = normalized.indexOf("@");
+  return normalized.length > 2 &&
+    at > 0 &&
+    at === normalized.lastIndexOf("@") &&
+    at < normalized.length - 1 &&
+    !/[\s\u0000-\u001f\u007f]/.test(normalized);
+}
+
 export function loginClientKey(headers: Headers): string | null {
   const candidate = firstValidIp(
     headers.get("x-vercel-forwarded-for") ??

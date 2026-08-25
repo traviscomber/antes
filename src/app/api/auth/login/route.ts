@@ -7,7 +7,10 @@ import {
   recordFailedLogin,
   setSessionCookie,
 } from "@/lib/auth/session";
-import { loginClientKey } from "@/lib/auth/login-throttle";
+import {
+  isPlausibleLoginEmail,
+  loginClientKey,
+} from "@/lib/auth/login-throttle";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,7 +25,12 @@ export async function POST(request: NextRequest) {
   const password = String(form.get("password") ?? "");
   const clientKey = loginClientKey(request.headers);
 
-  if (!email || !password || email.length > 320 || password.length > 512) {
+  if (
+    !isPlausibleLoginEmail(email) ||
+    !password ||
+    email.length > 320 ||
+    password.length > 512
+  ) {
     return redirectToLogin(request, "invalid");
   }
 
