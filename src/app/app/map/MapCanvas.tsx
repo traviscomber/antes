@@ -39,11 +39,13 @@ export default function MapCanvas({ latitude, longitude, points, alerts, locatio
   const [activeLayers, setActiveLayers] = useState<Set<MapLayer>>(() => new Set(viewMeta.relevant.layers));
   const [powerMode, setPowerMode] = useState<PowerMode>("current");
   const [zoom, setZoom] = useState(9);
+  const [fitRequest, setFitRequest] = useState(0);
   const [selected, setSelected] = useState<MapPoint | null>(null);
   const mapNodeRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const markerLayerRef = useRef<LayerGroup | null>(null);
   const didFitRef = useRef(false);
+  const lastFitRequestRef = useRef(0);
 
   const visible = useMemo(() => points.filter((point) => {
     if (!activeLayers.has(point.layer)) return false;
@@ -176,10 +178,18 @@ export default function MapCanvas({ latitude, longitude, points, alerts, locatio
     markerLayerRef.current = null;
   }, []);
 
+  useEffect(() => {
+    if (fitRequest === lastFitRequestRef.current) return;
+    lastFitRequestRef.current = fitRequest;
+    fitViewToPoints(mapRef.current, visible, latitude, longitude, viewMode);
+  }, [fitRequest, latitude, longitude, viewMode, visible]);
+
   function selectView(mode: ViewMode) {
+    const layers = new Set<MapLayer>(viewMeta[mode].layers);
     setViewMode(mode);
-    setActiveLayers(new Set(viewMeta[mode].layers));
+    setActiveLayers(layers);
     setSelected(null);
+    setFitRequest((request) => request + 1);
   }
 
   function toggleLayer(layer: MapLayer) {
@@ -188,6 +198,14 @@ export default function MapCanvas({ latitude, longitude, points, alerts, locatio
       if (next.has(layer)) next.delete(layer); else next.add(layer);
       return next;
     });
+    setSelected(null);
+    setFitRequest((request) => request + 1);
+  }
+
+  function selectPowerMode(mode: PowerMode) {
+    setPowerMode(mode);
+    setSelected(null);
+    setFitRequest((request) => request + 1);
   }
 
   return <div className={styles.workspace}>
@@ -200,20 +218,20 @@ export default function MapCanvas({ latitude, longitude, points, alerts, locatio
         })}
       </div>
 
-      <div className={filterStyles.layerRail} aria-label="Todas las capas disponibles"><span>TODAS LAS CAPAS</span>{allLayers.map((layer) => {
+      <div className={filterStyles.layerRail} role="group" aria-label="Todas las capas disponibles"><span>TODAS LAS CAPAS</span>{allLayers.map((layer) => {
         const enabled = activeLayers.has(layer);
         const count = layerCounts.get(layer) ?? 0;
-        return <button key={layer} type="button" aria-pressed={enabled} onClick={() => toggleLayer(layer)} className={enabled ? filterStyles.layerActive : filterStyles.layerButton}><i>{layerMeta[layer].icon}</i>{layerMeta[layer].shortLabel}<strong>{count}</strong></button>;
+        return <button key={layer} type="button" aria-label={`${layerMeta[layer].label}: ${count} señales, ${enabled ? "activa" : "inactiva"}`} aria-pressed={enabled} onClick={() => toggleLayer(layer)} className={enabled ? filterStyles.layerActive : filterStyles.layerButton}><i aria-hidden="true">{layerMeta[layer].icon}</i>{layerMeta[layer].shortLabel}<strong>{count}</strong></button>;
       })}</div>
 
       <div className={filterStyles.operationalSummary}><span><b>{summary.primary}</b>{summary.secondary}</span><small>{markerItems.length} elementos dibujados · {visible.length} señales</small></div>
 
-      {activeLayers.has("power") && powerCounts.all > 0 ? <div className={filterStyles.powerBar} aria-label="Tipo de evento eléctrico">
+      {activeLayers.has("power") && powerCounts.all > 0 ? <div className={filterStyles.powerBar} role="group" aria-label="Tipo de evento eléctrico">
         <span><b>Electricidad</b> · visualización</span>
         <div className={filterStyles.powerModes}>
-          <PowerModeButton mode="current" activeMode={powerMode} count={powerCounts.current} onSelect={setPowerMode}>En curso</PowerModeButton>
-          <PowerModeButton mode="scheduled" activeMode={powerMode} count={powerCounts.scheduled} onSelect={setPowerMode}>Programados</PowerModeButton>
-          <PowerModeButton mode="all" activeMode={powerMode} count={powerCounts.all} onSelect={setPowerMode}>Todos</PowerModeButton>
+          <PowerModeButton mode="current" activeMode={powerMode} count={powerCounts.current} onSelect={selectPowerMode}>En curso</PowerModeButton>
+          <PowerModeButton mode="scheduled" activeMode={powerMode} count={powerCounts.scheduled} onSelect={selectPowerMode}>Programados</PowerModeButton>
+          <PowerModeButton mode="all" activeMode={powerMode} count={powerCounts.all} onSelect={selectPowerMode}>Todos</PowerModeButton>
         </div>
       </div> : null}
 
@@ -243,6 +261,17 @@ export default function MapCanvas({ latitude, longitude, points, alerts, locatio
 function PowerModeButton({ mode, activeMode, count, onSelect, children }: { mode: PowerMode; activeMode: PowerMode; count: number; onSelect: (mode: PowerMode) => void; children: React.ReactNode }) {
   const selected = mode === activeMode;
   return <button type="button" aria-pressed={selected} className={selected ? filterStyles.powerModeActive : filterStyles.powerMode} onClick={() => onSelect(mode)}>{children}<strong>{count}</strong></button>;
+}
+
+function fitViewToPoints(map: LeafletMap | null, points: MapPoint[], latitude: number, longitude: number, mode: ViewMode) {
+  if (!map) return;
+  const candidates = points.filter((point) => point.distanceKm <= 120 && (mode !== "relevant" || (point.distanceKm <= 85 && point.layer !== "seismic" && point.layer !== "coastal")));
+  if (candidates.length === 0) {
+    map.setView([latitude, longitude], 10, { animate: true });
+    return;
+  }
+  const bounds: [number, number][] = [[latitude, longitude], ...candidates.map((point) => [point.latitude, point.longitude] as [number, number])];
+  map.fitBounds(bounds, { padding: [34, 34], maxZoom: mode === "context" ? 9 : 10, animate: true });
 }
 
 function operationalSummary(points: MapPoint[]): { primary: string; secondary: string } {
