@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
 
     const sessionToken = await createSession(identity);
     await setSessionCookie(sessionToken);
-    return NextResponse.redirect(new URL("/app/now", request.url), 303);
+    return NextResponse.redirect(new URL("/app/map", request.url), 303);
   } catch {
     return redirectToActivation(request, "unavailable");
   }
