@@ -6,18 +6,24 @@ import type { Map as LeafletMap, LayerGroup } from "leaflet";
 import type { MapLayer, MapPoint } from "@/lib/map/read-model";
 import type { PersonalAlert } from "@/lib/now/read-model";
 import styles from "./map.module.css";
+import filterStyles from "./map-filters.module.css";
 
 const categoryMeta = {
-  infrastructure: { label: "Infraestructura", icon: "▥", layers: ["roads", "alerts"] as MapLayer[] },
-  services: { label: "Servicios", icon: "ϟ", layers: ["power", "water", "fuel"] as MapLayer[] },
-  territory: { label: "Clima y territorio", icon: "◔", layers: ["weather", "fires", "air"] as MapLayer[] },
-  context: { label: "Contexto", icon: "⌁", layers: [] as MapLayer[] },
+  alerts: { label: "Alertas", icon: "!", layers: ["alerts"] as MapLayer[] },
+  infrastructure: { label: "Infraestructura", icon: "▥", layers: ["roads"] as MapLayer[] },
+  power: { label: "Electricidad", icon: "ϟ", layers: ["power"] as MapLayer[] },
+  water: { label: "Caudales y agua", icon: "≋", layers: ["water"] as MapLayer[] },
+  fuel: { label: "Combustible", icon: "◇", layers: ["fuel"] as MapLayer[] },
+  weather: { label: "Meteorología", icon: "◔", layers: ["weather"] as MapLayer[] },
+  fires: { label: "Incendios", icon: "▲", layers: ["fires"] as MapLayer[] },
+  air: { label: "Calidad del aire", icon: "◌", layers: ["air"] as MapLayer[] },
   seismic: { label: "Sismos", icon: "◉", layers: ["seismic"] as MapLayer[] },
   coastal: { label: "Costa", icon: "≈", layers: ["coastal"] as MapLayer[] },
 } as const;
 
 type Category = keyof typeof categoryMeta;
-const defaultActive: Category[] = ["infrastructure", "services", "territory", "context"];
+const allCategories = Object.keys(categoryMeta) as Category[];
+const defaultActive: Category[] = allCategories;
 
 export default function MapCanvas({ latitude, longitude, points, alerts, location }: { latitude: number; longitude: number; points: MapPoint[]; alerts: PersonalAlert[]; location: string }) {
   const [active, setActive] = useState<Set<Category>>(() => new Set(defaultActive));
@@ -29,6 +35,14 @@ export default function MapCanvas({ latitude, longitude, points, alerts, locatio
 
   const enabledLayers = useMemo(() => new Set([...active].flatMap((category) => categoryMeta[category].layers)), [active]);
   const visible = useMemo(() => points.filter((point) => enabledLayers.has(point.layer)), [points, enabledLayers]);
+  const categoryCounts = useMemo(() => {
+    const counts = new Map<Category, number>(allCategories.map((category) => [category, 0]));
+    for (const point of points) {
+      const category = allCategories.find((candidate) => categoryMeta[candidate].layers.includes(point.layer));
+      if (category) counts.set(category, (counts.get(category) ?? 0) + 1);
+    }
+    return counts;
+  }, [points]);
   const alertGroups = groupAlerts(alerts);
 
   useEffect(() => {
@@ -124,23 +138,24 @@ export default function MapCanvas({ latitude, longitude, points, alerts, locatio
   }
 
   function toggleAll() {
-    setActive((current) => current.size === Object.keys(categoryMeta).length ? new Set() : new Set(Object.keys(categoryMeta) as Category[]));
+    setActive((current) => current.size === allCategories.length ? new Set() : new Set(allCategories));
   }
 
   return <div className={styles.workspace}>
     <div className={styles.mainColumn}>
       <div className={styles.filterBar}>
-        <button type="button" onClick={toggleAll} className={`${styles.filter} ${active.size === Object.keys(categoryMeta).length ? styles.filterActive : ""}`}><span>▱</span>Todas<strong>{points.length}</strong></button>
-        {(Object.keys(categoryMeta) as Category[]).map((category) => {
+        <button type="button" onClick={toggleAll} aria-pressed={active.size === allCategories.length} className={`${styles.filter} ${filterStyles.control} ${active.size === allCategories.length ? filterStyles.active : filterStyles.inactive}`}><span className={filterStyles.state}>{active.size === allCategories.length ? "●" : "○"}</span><span>▱</span>Todas<strong>{points.length}</strong></button>
+        {allCategories.map((category) => {
           const meta = categoryMeta[category];
-          const count = points.filter((point) => meta.layers.includes(point.layer)).length;
-          return <button key={category} type="button" onClick={() => toggle(category)} className={`${styles.filter} ${active.has(category) ? styles.filterActive : ""} ${category === "seismic" || category === "coastal" ? styles.filterToggle : ""}`}><span>{meta.icon}</span>{meta.label}<strong>{count}</strong></button>;
+          const count = categoryCounts.get(category) ?? 0;
+          const isActive = active.has(category);
+          return <button key={category} type="button" onClick={() => toggle(category)} aria-pressed={isActive} className={`${styles.filter} ${filterStyles.control} ${isActive ? filterStyles.active : filterStyles.inactive} ${count === 0 ? filterStyles.empty : ""}`}><span className={filterStyles.state}>{isActive ? "●" : "○"}</span><span>{meta.icon}</span>{meta.label}<strong>{count}</strong></button>;
         })}
       </div>
 
       <div className={styles.mapFrame}>
         <div ref={mapNodeRef} className={styles.leafletMap} aria-label={`Mapa operacional de ${location}`} />
-        <div className={styles.status}><b>● Actualizado ahora</b><span>{visible.length} señales visibles</span><span>radio máx. 120 km</span></div>
+        <div className={styles.status}><b>● Actualizado ahora</b><span>{visible.length} de {points.length} señales activas</span><span>radio máx. 120 km</span></div>
         <div className={styles.legend}><span><i style={{background:"#ff5f59"}}/>Crítica</span><span><i style={{background:"#f2a02f"}}/>Advertencia</span><span><i style={{background:"#e1ca44"}}/>Vigilancia</span><span><i style={{background:"#3d7e5b"}}/>Informativa</span><span><i style={{background:"#245d9c"}}/>Marítima</span></div>
         {selected ? <div className={styles.popup}>
           <button type="button" onClick={() => setSelected(null)} aria-label="Cerrar">×</button>
