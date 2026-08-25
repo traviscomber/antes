@@ -2,7 +2,7 @@
 
 import "leaflet/dist/leaflet.css";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Map as LeafletMap, LayerGroup } from "leaflet";
+import type { Map as LeafletMap, LayerGroup, TileLayer } from "leaflet";
 import { powerStateFor, type MapLayer, type MapPoint } from "@/lib/map/read-model";
 import { clusterMapPoints } from "@/lib/map/clusters";
 import type { PersonalAlert } from "@/lib/now/read-model";
@@ -31,6 +31,7 @@ const viewMeta = {
 
 type ViewMode = keyof typeof viewMeta;
 type PowerMode = "current" | "scheduled" | "all";
+type BaseMap = "satellite" | "street";
 const viewModes = Object.keys(viewMeta) as ViewMode[];
 const allLayers = Object.keys(layerMeta) as MapLayer[];
 
@@ -38,12 +39,15 @@ export default function MapCanvas({ latitude, longitude, points, alerts, locatio
   const [viewMode, setViewMode] = useState<ViewMode>("relevant");
   const [activeLayers, setActiveLayers] = useState<Set<MapLayer>>(() => new Set(viewMeta.relevant.layers));
   const [powerMode, setPowerMode] = useState<PowerMode>("current");
+  const [baseMap, setBaseMap] = useState<BaseMap>("satellite");
   const [zoom, setZoom] = useState(9);
   const [fitRequest, setFitRequest] = useState(0);
   const [selected, setSelected] = useState<MapPoint | null>(null);
   const mapNodeRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const markerLayerRef = useRef<LayerGroup | null>(null);
+  const baseLayerRef = useRef<TileLayer | null>(null);
+  const labelLayerRef = useRef<TileLayer | null>(null);
   const didFitRef = useRef(false);
   const lastFitRequestRef = useRef(0);
 
@@ -95,11 +99,6 @@ export default function MapCanvas({ latitude, longitude, points, alerts, locatio
         preferCanvas: true,
       }).setView([latitude, longitude], 9);
 
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 18,
-        attribution: "© OpenStreetMap contributors",
-      }).addTo(map);
-
       markerLayerRef.current = L.layerGroup().addTo(map);
       map.on("zoomend", () => setZoom(map.getZoom()));
       mapRef.current = map;
@@ -109,6 +108,46 @@ export default function MapCanvas({ latitude, longitude, points, alerts, locatio
     void mountMap();
     return () => { cancelled = true; };
   }, [latitude, longitude]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let retry: number | undefined;
+
+    async function syncBaseMap() {
+      const map = mapRef.current;
+      if (!map) {
+        retry = window.setTimeout(() => { if (!cancelled) void syncBaseMap(); }, 40);
+        return;
+      }
+      const L = await import("leaflet");
+      if (cancelled) return;
+      baseLayerRef.current?.remove();
+      labelLayerRef.current?.remove();
+      labelLayerRef.current = null;
+
+      if (baseMap === "satellite") {
+        baseLayerRef.current = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+          maxZoom: 18,
+          attribution: "Tiles © Esri — Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+        }).addTo(map);
+        labelLayerRef.current = L.tileLayer("https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", {
+          maxZoom: 18,
+          attribution: "Labels © Esri",
+        }).addTo(map);
+      } else {
+        baseLayerRef.current = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          maxZoom: 18,
+          attribution: "© OpenStreetMap contributors",
+        }).addTo(map);
+      }
+    }
+
+    void syncBaseMap();
+    return () => {
+      cancelled = true;
+      if (retry !== undefined) window.clearTimeout(retry);
+    };
+  }, [baseMap]);
 
   useEffect(() => {
     let cancelled = false;
@@ -235,8 +274,12 @@ export default function MapCanvas({ latitude, longitude, points, alerts, locatio
         </div>
       </div> : null}
 
-      <div className={styles.mapFrame}>
+      <div className={styles.mapFrame} data-basemap={baseMap}>
         <div ref={mapNodeRef} className={styles.leafletMap} aria-label={`Mapa operacional de ${location}`} />
+        <div className={styles.baseMapSwitch} role="group" aria-label="Vista del mapa">
+          <button type="button" aria-pressed={baseMap === "satellite"} className={baseMap === "satellite" ? styles.baseMapActive : styles.baseMapButton} onClick={() => setBaseMap("satellite")}>Satélite</button>
+          <button type="button" aria-pressed={baseMap === "street"} className={baseMap === "street" ? styles.baseMapActive : styles.baseMapButton} onClick={() => setBaseMap("street")}>Mapa</button>
+        </div>
         <div className={styles.status}><b>● Actualizado ahora</b><span>{visible.length} de {points.length} señales activas</span><span>radio máx. 120 km</span></div>
         <div className={styles.legend}><span><i style={{background:"#ff5f59"}}/>Crítica</span><span><i style={{background:"#f2a02f"}}/>Advertencia</span><span><i style={{background:"#e1ca44"}}/>Vigilancia</span><span><i style={{background:"#3d7e5b"}}/>Informativa</span><span><i style={{background:"#245d9c"}}/>Marítima</span></div>
         {selected ? <div className={styles.popup}>
