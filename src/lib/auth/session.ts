@@ -229,10 +229,7 @@ export async function activateInvite(
      ), user_row as (
        insert into app_users (email, password_hash, status)
        select email, $2, 'active' from invite
-       on conflict (email) do update set
-         password_hash = excluded.password_hash,
-         status = 'active',
-         updated_at = now()
+       on conflict (email) do nothing
        returning id, email, display_name
      ), membership_row as (
        insert into organization_memberships (organization_id, user_id, role, status)
