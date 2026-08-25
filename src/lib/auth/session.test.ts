@@ -16,7 +16,11 @@ vi.mock("next/navigation", () => ({
   redirect: vi.fn(),
 }));
 
-import { isLoginThrottled, recordFailedLogin } from "./session";
+import {
+  activateInvite,
+  isLoginThrottled,
+  recordFailedLogin,
+} from "./session";
 
 describe("login throttling persistence", () => {
   beforeEach(() => {
@@ -60,5 +64,18 @@ describe("login throttling persistence", () => {
       expect.stringMatching(/delete from auth_login_attempts[\s\S]*insert into auth_login_attempts/),
       ["attempt@example.com", "client-key:opaque-client", 15, 5_000, 40, 8],
     );
+  });
+
+  it("never overwrites credentials when an invite targets an existing email", async () => {
+    queryMock.mockResolvedValueOnce([]);
+
+    await expect(activateInvite("one-time-token", "safe-password"))
+      .resolves.toBeNull();
+
+    const [statement] = queryMock.mock.calls[0] ?? [];
+    expect(statement).toEqual(expect.any(String));
+    expect(statement).toMatch(/on conflict \(email\) do nothing/i);
+    expect(statement).not.toMatch(/on conflict \(email\) do update/i);
+    expect(statement).not.toMatch(/password_hash\s*=\s*excluded\.password_hash/i);
   });
 });
