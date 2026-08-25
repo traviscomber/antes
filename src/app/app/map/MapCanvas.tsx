@@ -3,7 +3,7 @@
 import "leaflet/dist/leaflet.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Map as LeafletMap, LayerGroup } from "leaflet";
-import type { MapLayer, MapPoint } from "@/lib/map/read-model";
+import { powerStateFor, type MapLayer, type MapPoint } from "@/lib/map/read-model";
 import type { PersonalAlert } from "@/lib/now/read-model";
 import styles from "./map.module.css";
 import filterStyles from "./map-filters.module.css";
@@ -22,11 +22,13 @@ const categoryMeta = {
 } as const;
 
 type Category = keyof typeof categoryMeta;
+type PowerMode = "current" | "scheduled" | "all";
 const allCategories = Object.keys(categoryMeta) as Category[];
 const defaultActive: Category[] = allCategories;
 
 export default function MapCanvas({ latitude, longitude, points, alerts, location }: { latitude: number; longitude: number; points: MapPoint[]; alerts: PersonalAlert[]; location: string }) {
   const [active, setActive] = useState<Set<Category>>(() => new Set(defaultActive));
+  const [powerMode, setPowerMode] = useState<PowerMode>("current");
   const [selected, setSelected] = useState<MapPoint | null>(null);
   const mapNodeRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
@@ -34,7 +36,21 @@ export default function MapCanvas({ latitude, longitude, points, alerts, locatio
   const didFitRef = useRef(false);
 
   const enabledLayers = useMemo(() => new Set([...active].flatMap((category) => categoryMeta[category].layers)), [active]);
-  const visible = useMemo(() => points.filter((point) => enabledLayers.has(point.layer)), [points, enabledLayers]);
+  const visible = useMemo(() => points.filter((point) => {
+    if (!enabledLayers.has(point.layer)) return false;
+    if (point.layer !== "power" || powerMode === "all") return true;
+    return powerStateFor(point.signalType) === powerMode;
+  }), [points, enabledLayers, powerMode]);
+  const powerCounts = useMemo(() => {
+    let current = 0;
+    let scheduled = 0;
+    for (const point of points) {
+      const state = powerStateFor(point.signalType);
+      if (state === "current") current += 1;
+      if (state === "scheduled") scheduled += 1;
+    }
+    return { current, scheduled, all: current + scheduled };
+  }, [points]);
   const categoryCounts = useMemo(() => {
     const counts = new Map<Category, number>(allCategories.map((category) => [category, 0]));
     for (const point of points) {
@@ -99,7 +115,7 @@ export default function MapCanvas({ latitude, longitude, points, alerts, locatio
       for (const point of visible) {
         const icon = L.divIcon({
           className: "",
-          html: `<span class="${styles.leafletMarker} ${styles[`marker_${point.layer}`]}">${markerIcon(point.layer)}</span>`,
+          html: `<span class="${styles.leafletMarker} ${styles[`marker_${point.layer}`]} ${point.layer === "power" ? powerMarkerClass(point) : ""}">${markerIcon(point)}</span>`,
           iconSize: [30, 30],
           iconAnchor: [15, 15],
         });
@@ -153,16 +169,25 @@ export default function MapCanvas({ latitude, longitude, points, alerts, locatio
         })}
       </div>
 
+      {active.has("power") && powerCounts.all > 0 ? <div className={filterStyles.powerBar} aria-label="Tipo de evento eléctrico">
+        <span><b>Electricidad</b> · visualización</span>
+        <div className={filterStyles.powerModes}>
+          <PowerModeButton mode="current" activeMode={powerMode} count={powerCounts.current} onSelect={setPowerMode}>En curso</PowerModeButton>
+          <PowerModeButton mode="scheduled" activeMode={powerMode} count={powerCounts.scheduled} onSelect={setPowerMode}>Programados</PowerModeButton>
+          <PowerModeButton mode="all" activeMode={powerMode} count={powerCounts.all} onSelect={setPowerMode}>Todos</PowerModeButton>
+        </div>
+      </div> : null}
+
       <div className={styles.mapFrame}>
         <div ref={mapNodeRef} className={styles.leafletMap} aria-label={`Mapa operacional de ${location}`} />
         <div className={styles.status}><b>● Actualizado ahora</b><span>{visible.length} de {points.length} señales activas</span><span>radio máx. 120 km</span></div>
         <div className={styles.legend}><span><i style={{background:"#ff5f59"}}/>Crítica</span><span><i style={{background:"#f2a02f"}}/>Advertencia</span><span><i style={{background:"#e1ca44"}}/>Vigilancia</span><span><i style={{background:"#3d7e5b"}}/>Informativa</span><span><i style={{background:"#245d9c"}}/>Marítima</span></div>
         {selected ? <div className={styles.popup}>
           <button type="button" onClick={() => setSelected(null)} aria-label="Cerrar">×</button>
-          <small>{layerLabel(selected.layer).toUpperCase()} · {selected.distanceKm.toFixed(1)} KM</small>
+          <small>{pointKindLabel(selected).toUpperCase()} · {selected.distanceKm.toFixed(1)} KM</small>
           <h3>{selected.title}</h3>
           <p>{localizeValue(selected.value ?? selected.commune ?? selected.region ?? "Señal oficial georreferenciada")}</p>
-          <div className={styles.popupMeta}><span>{selected.sourceName}</span><span>{new Intl.DateTimeFormat("es-CL", { dateStyle: "short", timeStyle: "short" }).format(new Date(selected.observedAt))}</span></div>
+          <div className={styles.popupMeta}><span>{selected.sourceName}</span><span>{powerTiming(selected)}</span></div>
           {selected.sourceUrl ? <a href={selected.sourceUrl} target="_blank" rel="noreferrer">Abrir fuente oficial ↗</a> : null}
         </div> : null}
       </div>
@@ -174,6 +199,11 @@ export default function MapCanvas({ latitude, longitude, points, alerts, locatio
       <div className={styles.panelFooter}>Ver todas las alertas ↗</div>
     </aside>
   </div>;
+}
+
+function PowerModeButton({ mode, activeMode, count, onSelect, children }: { mode: PowerMode; activeMode: PowerMode; count: number; onSelect: (mode: PowerMode) => void; children: React.ReactNode }) {
+  const selected = mode === activeMode;
+  return <button type="button" aria-pressed={selected} className={selected ? filterStyles.powerModeActive : filterStyles.powerMode} onClick={() => onSelect(mode)}>{children}<strong>{count}</strong></button>;
 }
 
 function AlertRow({ alert }: { alert: PersonalAlert }) {
@@ -195,6 +225,9 @@ function groupLabel(group: AlertGroup){return group==="infrastructure"?"INFRAEST
 function alertTitle(type:string, source:string){const t=type.toLowerCase();if(t.includes("road"))return `Emergencias viales ${sourceLabel(source)}`;if(t.includes("infrastructure"))return `Afectaciones de infraestructura ${sourceLabel(source)}`;if(t.includes("outage")&&t.includes("scheduled"))return `Corte programado ${sourceLabel(source)}`;if(t.includes("outage"))return `Corte eléctrico ${sourceLabel(source)}`;if(t.includes("marine"))return `Avisos marítimos ${sourceLabel(source)}`;if(t.includes("wildfire")||t.includes("fire"))return `Incendio activo ${sourceLabel(source)}`;return source;}
 function compactReason(alert: PersonalAlert){if(alert.itemCount>1)return `${alert.itemCount} eventos vigentes${alert.criticalCount?` · ${alert.criticalCount} críticos`:""}`;return localizeValue(alert.reason);}
 function sourceLabel(source:string){if(/mop/i.test(source))return "MOP";if(/saesa/i.test(source))return "SAESA";if(/directemar/i.test(source))return "DIRECTEMAR";return source;}
-function markerIcon(layer:MapLayer){return layer==="power"?"ϟ":layer==="roads"||layer==="alerts"?"△":layer==="coastal"?"≈":layer==="seismic"?"◉":layer==="fires"?"▲":"▣";}
+function markerIcon(point:MapPoint){if(point.layer==="power")return powerStateFor(point.signalType)==="scheduled"?"◷":"ϟ";return point.layer==="roads"||point.layer==="alerts"?"△":point.layer==="coastal"?"≈":point.layer==="seismic"?"◉":point.layer==="fires"?"▲":"▣";}
+function powerMarkerClass(point:MapPoint){return powerStateFor(point.signalType)==="scheduled"?filterStyles.powerScheduledMarker:filterStyles.powerCurrentMarker;}
+function pointKindLabel(point:MapPoint){const powerState=powerStateFor(point.signalType);if(powerState==="scheduled")return "Corte programado";if(powerState==="current")return point.qualityState==="provisional"?"Corte reportado · por confirmar":"Corte en curso";return layerLabel(point.layer);}
+function powerTiming(point:MapPoint){const date=powerStateFor(point.signalType)==="scheduled"&&point.validFrom?point.validFrom:point.lastSeenAt;return `${powerStateFor(point.signalType)==="scheduled"?"Inicio":"Visto"} ${new Intl.DateTimeFormat("es-CL",{dateStyle:"short",timeStyle:"short"}).format(new Date(date))}`;}
 function layerLabel(layer:MapLayer){return ({alerts:"Alertas",power:"Electricidad",roads:"Infraestructura",air:"Aire",fuel:"Combustible",water:"Agua",coastal:"Costa",fires:"Incendios",seismic:"Sismos",weather:"Meteorología"} as Record<MapLayer,string>)[layer];}
 function localizeValue(value:string){return value.replace(/(\d+)\s+affected_customers/gi,"$1 clientes afectados").replace(/affected customers/gi,"clientes afectados").replace(/customers affected/gi,"clientes afectados");}
