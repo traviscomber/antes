@@ -7,6 +7,7 @@ import {
   recordFailedLogin,
   setSessionCookie,
 } from "@/lib/auth/session";
+import { loginClientKey } from "@/lib/auth/login-throttle";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,19 +20,20 @@ export async function POST(request: NextRequest) {
   const form = await request.formData();
   const email = String(form.get("email") ?? "").trim().toLowerCase();
   const password = String(form.get("password") ?? "");
+  const clientKey = loginClientKey(request.headers);
 
   if (!email || !password || email.length > 320 || password.length > 512) {
     return redirectToLogin(request, "invalid");
   }
 
   try {
-    if (await isLoginThrottled(email)) {
+    if (await isLoginThrottled(email, clientKey)) {
       return redirectToLogin(request, "locked");
     }
 
     const identity = await authenticateUser(email, password);
     if (!identity) {
-      await recordFailedLogin(email);
+      await recordFailedLogin(email, clientKey);
       return redirectToLogin(request, "invalid");
     }
 

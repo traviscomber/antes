@@ -7,11 +7,16 @@ import {
 import { neon } from "@neondatabase/serverless";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import {
+  LOGIN_WINDOW_MINUTES,
+  MAX_CLIENT_FAILED_ATTEMPTS,
+  MAX_EMAIL_FAILED_ATTEMPTS,
+  MAX_GLOBAL_FAILED_ATTEMPTS,
+  normalizeLoginEmail,
+} from "./login-throttle";
 
 const SESSION_COOKIE = "antemano_session";
 const SESSION_TTL_SECONDS = 8 * 60 * 60;
-const LOGIN_WINDOW_MINUTES = 15;
-const MAX_FAILED_ATTEMPTS = 8;
 const SCRYPT_N = 16_384;
 const SCRYPT_R = 8;
 const SCRYPT_P = 1;
@@ -49,7 +54,7 @@ function db() {
 }
 
 function normalizeEmail(email: string): string {
-  return email.trim().toLowerCase();
+  return normalizeLoginEmail(email);
 }
 
 function tokenHash(token: string): string {
@@ -111,28 +116,67 @@ function verifyPassword(password: string, encodedHash: string): boolean {
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
-export async function isLoginThrottled(email: string): Promise<boolean> {
+export async function isLoginThrottled(
+  email: string,
+  clientKey: string | null,
+): Promise<boolean> {
   const emailKey = normalizeEmail(email);
   if (!emailKey) return false;
 
-  const rows = await db().query<{ attempts: number }>(
-    `select count(*)::int as attempts
+  const rows = await db().query<{
+    email_attempts: number;
+    client_attempts: number;
+    global_attempts: number;
+  }>(
+    `select
+       count(*) filter (where email_key = $1)::int as email_attempts,
+       count(*) filter (where $2::text is not null and client_key = $2)::int as client_attempts,
+       count(*)::int as global_attempts
        from auth_login_attempts
-      where email_key = $1
-        and attempted_at > now() - make_interval(mins => $2)`,
-    [emailKey, LOGIN_WINDOW_MINUTES],
+      where attempted_at > now() - make_interval(mins => $3)`,
+    [emailKey, clientKey, LOGIN_WINDOW_MINUTES],
   );
 
-  return (rows[0]?.attempts ?? 0) >= MAX_FAILED_ATTEMPTS;
+  const row = rows[0];
+  return (row?.email_attempts ?? 0) >= MAX_EMAIL_FAILED_ATTEMPTS ||
+    (clientKey !== null && (row?.client_attempts ?? 0) >= MAX_CLIENT_FAILED_ATTEMPTS) ||
+    (row?.global_attempts ?? 0) >= MAX_GLOBAL_FAILED_ATTEMPTS;
 }
 
-export async function recordFailedLogin(email: string): Promise<void> {
+export async function recordFailedLogin(
+  email: string,
+  clientKey: string | null,
+): Promise<void> {
   const emailKey = normalizeEmail(email);
   if (!emailKey) return;
 
   await db().query(
-    `insert into auth_login_attempts (email_key) values ($1)`,
-    [emailKey],
+    `with cleanup as (
+       delete from auth_login_attempts
+        where attempted_at < now() - interval '1 day'
+     ), capacity as (
+       select
+         (select count(*) from auth_login_attempts
+           where attempted_at > now() - make_interval(mins => $3)) < $4
+         and ($2::text is null or
+           (select count(*) from auth_login_attempts
+             where client_key = $2
+               and attempted_at > now() - make_interval(mins => $3)) < $5)
+         and (select count(*) from auth_login_attempts
+               where email_key = $1
+                 and attempted_at > now() - make_interval(mins => $3)) < $6
+         as may_insert
+     )
+     insert into auth_login_attempts (email_key, client_key)
+     select $1, $2 from capacity where may_insert`,
+    [
+      emailKey,
+      clientKey,
+      LOGIN_WINDOW_MINUTES,
+      MAX_GLOBAL_FAILED_ATTEMPTS,
+      MAX_CLIENT_FAILED_ATTEMPTS,
+      MAX_EMAIL_FAILED_ATTEMPTS,
+    ],
   );
 }
 
