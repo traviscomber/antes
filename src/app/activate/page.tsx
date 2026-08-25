@@ -13,12 +13,13 @@ export default async function ActivatePage({
 }: {
   searchParams: Promise<{ error?: string; token?: string }>;
 }) {
+  let authenticated = false;
   try {
-    const session = await getSession();
-    if (session) redirect("/app/now");
+    authenticated = Boolean(await getSession());
   } catch {
     // Activation remains visible when the database is temporarily unavailable.
   }
+  if (authenticated) redirect("/app/map");
 
   const params = await searchParams;
   const message = params.error ? ERROR_MESSAGES[params.error] : undefined;
