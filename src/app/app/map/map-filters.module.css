@@ -59,6 +59,144 @@
   outline-offset: 2px;
 }
 
+.viewControl {
+  flex: 1 1 150px;
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 9px 13px;
+  border: 1px solid #29302a;
+  border-radius: 5px;
+  background: #0f1210;
+  color: #9aa29b;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.viewControl span {
+  display: grid;
+  gap: 3px;
+  color: #e6eae5;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.viewControl small {
+  color: #737d74;
+  font-size: 8px;
+  font-weight: 500;
+}
+
+.viewControl strong {
+  color: #a9b1a9;
+  font-size: 13px;
+}
+
+.viewControl:hover,
+.viewActive {
+  border-color: #5fc871;
+  background: #152d1b;
+}
+
+.viewActive strong {
+  color: #78db89;
+}
+
+.layerRail {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -1px 0 10px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.layerRail > span {
+  margin-right: 3px;
+  color: #626b63;
+  font-size: 8px;
+  letter-spacing: .12em;
+}
+
+.layerButton,
+.layerActive {
+  flex: 0 0 auto;
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid #252b26;
+  border-radius: 4px;
+  background: #0d100e;
+  color: #69726a;
+  font: inherit;
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.layerActive {
+  border-color: #3c6844;
+  background: #132218;
+  color: #dce4dc;
+}
+
+.layerButton i,
+.layerActive i {
+  font-style: normal;
+}
+
+.layerButton strong,
+.layerActive strong {
+  font-size: 8px;
+  opacity: .75;
+}
+
+.operationalSummary {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  border-left: 2px solid #65c977;
+  background: #0f1210;
+  color: #8f988f;
+  font-size: 10px;
+}
+
+.operationalSummary b {
+  color: #edf2ec;
+}
+
+.operationalSummary small {
+  color: #687169;
+  white-space: nowrap;
+}
+
+.clusterMarker {
+  width: 38px;
+  height: 38px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-width: 2px;
+  line-height: 1;
+}
+
+.clusterMarker b {
+  font-size: 12px;
+}
+
+.clusterMarker small {
+  font-size: 8px;
+  opacity: .8;
+}
+
 .powerBar {
   display: flex;
   align-items: center;
@@ -125,6 +263,15 @@
 }
 
 @media (max-width: 720px) {
+  .viewControl {
+    flex-basis: calc(50% - 4px);
+  }
+
+  .operationalSummary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .powerBar {
     align-items: flex-start;
     flex-direction: column;
