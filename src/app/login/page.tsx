@@ -13,12 +13,13 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
+  let authenticated = false;
   try {
-    const session = await getSession();
-    if (session) redirect("/app/now");
+    authenticated = Boolean(await getSession());
   } catch {
     // The form remains available and the POST route will return a controlled error.
   }
+  if (authenticated) redirect("/app/map");
 
   const params = await searchParams;
   const message = params.error ? ERROR_MESSAGES[params.error] : undefined;
