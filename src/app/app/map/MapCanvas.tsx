@@ -265,7 +265,7 @@ function PowerModeButton({ mode, activeMode, count, onSelect, children }: { mode
 
 function fitViewToPoints(map: LeafletMap | null, points: MapPoint[], latitude: number, longitude: number, mode: ViewMode) {
   if (!map) return;
-  const candidates = points.filter((point) => point.distanceKm <= 120 && (mode !== "relevant" || (point.distanceKm <= 85 && point.layer !== "seismic" && point.layer !== "coastal")));
+  const candidates = points.filter((point) => point.distanceKm <= 120);
   if (candidates.length === 0) {
     map.setView([latitude, longitude], 10, { animate: true });
     return;
