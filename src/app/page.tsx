@@ -1,7 +1,19 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getSession } from "@/lib/auth/session";
 import styles from "./landing.module.css";
 
-export default function HomePage() {
+export const dynamic = "force-dynamic";
+
+export default async function HomePage() {
+  let authenticated = false;
+  try {
+    authenticated = Boolean(await getSession());
+  } catch {
+    // Keep the public landing available during transient auth/database failures.
+  }
+  if (authenticated) redirect("/app/map");
+
   return (
     <main className={styles.page}>
       <nav className={styles.nav} aria-label="Principal">
