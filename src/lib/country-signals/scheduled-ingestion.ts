@@ -77,7 +77,7 @@ export async function runScheduledCountrySignalIngestion(
     | undefined;
   let personalAlertError: string | undefined;
 
-  if (results.some((result) => result.state !== "failed")) {
+  // Rebuild personal alerts only when canonical signal data actually changed.\n  // Duplicate-only polling cycles must remain cheap.\n  if (results.some((result) => result.accepted > 0)) {
     try {
       personalAlerts = await refreshPersonalAlertsForAllCriticalSources();
     } catch (error) {
