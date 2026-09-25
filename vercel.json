@@ -1,6 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "fluid": true,\n  "framework": "nextjs",
+  "fluid": true,
+  "framework": "nextjs",
   "outputDirectory": null,
   "crons": [
     {
